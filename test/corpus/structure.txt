@@ -1,0 +1,373 @@
+==================
+Comment and blank line preserve their owners
+==================
+  # attributes
+
+*.txt text -diff !merge eol=lf
+
+---
+
+(document
+  (comment (comment_marker) (comment_text) (line_ending))
+  (blank_line (line_ending))
+  (attribute_rule
+    pattern: (pattern (wildcard) (glob_literal))
+    (attribute name: (attribute_name (name_text)))
+    (attribute modifier: (unset_marker) name: (attribute_name (name_text)))
+    (attribute modifier: (unspecified_marker) name: (attribute_name (name_text)))
+    (attribute name: (attribute_name (name_text)) operator: (assignment_operator) value: (attribute_value (value_text)))
+    (line_ending)))
+
+==================
+Macro definition and empty value
+==================
+[attr]binary -text diff=
+---
+
+(document
+  (macro_definition marker: (macro_marker) name: (attribute_name (name_text))
+    (attribute modifier: (unset_marker) name: (attribute_name (name_text)))
+    (attribute name: (attribute_name (name_text)) operator: (assignment_operator))))
+
+==================
+Quoted glob retains ranges in original source
+==================
+"\052/a\tb\\?.c" text
+---
+
+(document (attribute_rule
+  pattern: (pattern opening: (quote_open)
+    (wildcard) (path_separator) (glob_literal) (quoted_escape) (glob_literal) (escape) (glob_literal)
+    closing: (quote_close))
+  (attribute name: (attribute_name (name_text)))))
+
+==================
+Negated set owns range and class
+==================
+[!a-z[:digit:]] text
+---
+
+(document (attribute_rule pattern: (pattern
+  (character_set opening: (set_open) negation: (set_negation)
+    (character_range lower: (range_character) (range_operator) upper: (range_character))
+    (character_class name: (class_name))
+    closing: (set_close)))
+  (attribute name: (attribute_name (name_text)))))
+
+==================
+Dot and equal bracket text close at the first bracket
+==================
+[[.a.]-[.z.][=e=]]
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (character_set
+        opening: (set_open)
+        (set_text)
+        closing: (set_close))
+      (glob_literal)
+      (character_set
+        opening: (set_open)
+        (set_text)
+        closing: (set_close))
+      (character_set
+        opening: (set_open)
+        (set_text)
+        closing: (set_close))
+      (glob_literal))))
+
+==================
+Unclosed set retains literal braces and set text
+==================
+{a,b}[abc*
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (glob_literal)
+      (character_set
+        opening: (set_open)
+        (set_text)
+        issue: (syntax_issue
+          (incomplete_syntax
+            (missing_set_close)))))))
+
+==================
+Octal delimiters and quoted class name fragments retain fields
+==================
+"\133\133\072di\147it\072\135\135" text
+---
+
+(document (attribute_rule pattern: (pattern opening: (quote_open)
+  (character_set opening: (set_open)
+    (character_class name: (class_name) name: (quoted_escape) name: (class_name))
+    closing: (set_close))
+  closing: (quote_close))
+  (attribute name: (attribute_name (name_text)))))
+
+==================
+Escaped hyphen stays a quoted escape beside set text
+==================
+"[a\055b\055[:alpha:]]"
+---
+
+(document (attribute_rule pattern: (pattern opening: (quote_open)
+  (character_set opening: (set_open)
+    (character_range lower: (range_character) (range_operator) upper: (range_character))
+    (quoted_escape)
+    (character_class name: (class_name))
+    closing: (set_close))
+  closing: (quote_close))))
+
+==================
+Quoted bracket remains an escape inside an incomplete set
+==================
+"[\133"
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      opening: (quote_open)
+      (character_set
+        opening: (set_open)
+        (quoted_escape)
+        issue: (syntax_issue
+          (invalid_syntax
+            (missing_set_close))))
+      closing: (quote_close))))
+
+==================
+Negative pattern and attribute modifiers have distinct owners
+==================
+!a !text -diff=value
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      issue: (syntax_issue
+        (invalid_syntax
+          (negative_pattern)))
+      (glob_literal))
+    (attribute
+      modifier: (unspecified_marker)
+      name: (attribute_name
+        (name_text)))
+    (attribute
+      modifier: (unset_marker)
+      name: (attribute_name
+        (name_text))
+      operator: (assignment_operator)
+      value: (attribute_value
+        (value_text)))))
+
+==================
+Incomplete name at EOF
+==================
+a -
+---
+
+(document (attribute_rule pattern: (pattern (glob_literal))
+  (attribute modifier: (unset_marker) issue: (syntax_issue (incomplete_syntax (missing_attribute_name))))))
+
+==================
+Missing macro name preserves subsequent attributes
+==================
+[attr] text
+---
+
+(document (macro_definition marker: (macro_marker)
+  issue: (syntax_issue (invalid_syntax (missing_attribute_name)))
+  (attribute name: (attribute_name (name_text)))))
+
+==================
+Incomplete quoted escape and quote are separate issues
+==================
+"\12
+---
+
+(document (attribute_rule pattern: (pattern opening: (quote_open)
+  issue: (syntax_issue (incomplete_syntax (incomplete_quoted_escape)))
+  issue: (syntax_issue (incomplete_syntax (missing_quote_close))))))
+
+==================
+Newline completes invalid quotation and preserves the next rule
+==================
+"a\q
+next text
+
+---
+
+(document
+  (attribute_rule pattern: (pattern opening: (quote_open) (glob_literal)
+    issue: (syntax_issue (invalid_syntax (invalid_quoted_escape)))
+    issue: (syntax_issue (invalid_syntax (missing_quote_close)))) (line_ending))
+  (attribute_rule pattern: (pattern (glob_literal)) (attribute name: (attribute_name (name_text))) (line_ending)))
+
+==================
+Missing separator after quote preserves attribute
+==================
+"a"text
+---
+
+(document (attribute_rule pattern: (pattern opening: (quote_open) (glob_literal) closing: (quote_close))
+  issue: (syntax_issue (invalid_syntax (missing_attribute_separator)))
+  (attribute name: (attribute_name (name_text)))))
+
+==================
+Glob escape before separator and at EOF
+==================
+a\ text
+b\
+---
+
+(document
+  (attribute_rule pattern: (pattern (glob_literal) issue: (syntax_issue (invalid_syntax (incomplete_escape))))
+    (attribute name: (attribute_name (name_text))) (line_ending))
+  (attribute_rule pattern: (pattern (glob_literal) issue: (syntax_issue (incomplete_syntax (incomplete_escape))))))
+
+==================
+Classes inside an incomplete outer set preserve their owners
+==================
+[[:x:][[:y:][
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (character_set
+        opening: (set_open)
+        (character_class
+          name: (class_name))
+        (set_text)
+        (character_class
+          name: (class_name))
+        (set_text)
+        issue: (syntax_issue
+          (incomplete_syntax
+            (missing_set_close)))))))
+
+==================
+Caret negates a character set
+==================
+[^a]
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (character_set
+        opening: (set_open)
+        negation: (set_negation)
+        (set_text)
+        closing: (set_close)))))
+
+==================
+Quoted macro marker and name retain source spelling
+==================
+"[attr]plain" text
+"\133attr]\146oo" -diff
+---
+
+(document
+  (macro_definition
+    opening: (quote_open)
+    marker: (macro_marker)
+    name: (attribute_name
+      (name_text))
+    closing: (quote_close)
+    (attribute
+      name: (attribute_name
+        (name_text)))
+    (line_ending))
+  (macro_definition
+    opening: (quote_open)
+    marker: (macro_marker)
+    name: (attribute_name
+      (quoted_escape)
+      (name_text))
+    closing: (quote_close)
+    (attribute
+      modifier: (unset_marker)
+      name: (attribute_name
+        (name_text)))))
+
+==================
+Attribute name violations retain surrounding text
+==================
+* bad$name --name
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (wildcard))
+    (attribute
+      name: (attribute_name
+        (name_text)
+        issue: (syntax_issue
+          (invalid_syntax
+            (invalid_name_character)))
+        (name_text)))
+    (attribute
+      modifier: (unset_marker)
+      name: (attribute_name
+        issue: (syntax_issue
+          (invalid_syntax
+            (invalid_name_character)))
+        (name_text)))))
+
+==================
+Invalid quoted escape remains inside the character class
+==================
+"[[:a\q:]]"
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      opening: (quote_open)
+      (character_set
+        opening: (set_open)
+        (character_class
+          name: (class_name)
+          issue: (syntax_issue
+            (invalid_syntax
+              (invalid_quoted_escape))))
+        closing: (set_close))
+      closing: (quote_close))))
+
+==================
+Range upper bracket prevents a character class
+==================
+[a-[:digit:]] text
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (character_set
+        opening: (set_open)
+        (character_range
+          lower: (range_character)
+          (range_operator)
+          upper: (range_character))
+        (set_text)
+        closing: (set_close))
+      (glob_literal))
+    (attribute name: (attribute_name (name_text)))))
+
+==================
+Empty class has delimiters without a synthetic name
+==================
+[[::]]
+---
+
+(document (attribute_rule pattern: (pattern (character_set
+        opening: (set_open)
+        (character_class)
+        closing: (set_close)))))

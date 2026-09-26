@@ -1,0 +1,30 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "gitattributes",
+      "title": "Gitattributes",
+      "scope": "source.gitattributes",
+      "path": ".",
+      "file-types": [".gitattributes", "gitattributes"],
+      "injection-regex": "^gitattributes$",
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Tree-sitter grammar for gitattributes.",
+    "links": {
+      "repository": "https://github.com/konomanoasa/tree-sitter-gitattributes"
+    }
+  },
+  "bindings": {
+    "c": false,
+    "go": false,
+    "node": false,
+    "python": false,
+    "rust": true,
+    "swift": false
+  }
+}
