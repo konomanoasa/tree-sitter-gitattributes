@@ -1,6 +1,6 @@
 [package]
 name = "konomanoasa-tree-sitter-gitattributes"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Tree-sitter grammar for gitattributes."
 readme = "README.md"
