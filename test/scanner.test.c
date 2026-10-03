@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../src/parser.c"
 #include "../src/scanner.c"
 
 #ifdef TREE_SITTER_REUSE_ALLOCATOR
@@ -78,6 +79,21 @@ init_mock_lexer(struct MockLexer *mock, const int32_t *input, size_t length) {
     .length = length,
     .mark = SIZE_MAX,
   };
+}
+
+static void test_internal_lexer_accepts_eof_only_at_input_end(void) {
+  const int32_t input[] = {'x', 0, '\n', 0xfeff, -1};
+  for (size_t index = 0; index < sizeof(input) / sizeof(input[0]); index += 1) {
+    struct MockLexer mock;
+    init_mock_lexer(&mock, input + index, 1);
+    assert(!ts_lex(&mock.lexer, 0));
+    assert(mock.lexer.result_symbol != ts_builtin_sym_end);
+  }
+  struct MockLexer mock;
+  init_mock_lexer(&mock, NULL, 0);
+  assert(ts_lex(&mock.lexer, 0));
+  assert(mock.lexer.result_symbol == ts_builtin_sym_end);
+  assert(mock.mark == 0);
 }
 
 static void test_lifecycle_and_serialization_round_trip(void) {
@@ -260,6 +276,7 @@ static void test_reuse_allocator_failure_and_cleanup(void) {
 #endif
 
 int main(void) {
+  test_internal_lexer_accepts_eof_only_at_input_end();
   test_lifecycle_and_serialization_round_trip();
   test_disabled_and_recovery_scans_preserve_state();
   test_restored_comment_state_preserves_token_ranges();

@@ -79,13 +79,14 @@ typedef struct {
 // Positions count source characters from the current line start. Quoted units
 // are characters or C escapes; ranges stay on the original source. Zero-width
 // start tokens save lookahead decisions before their source is consumed.
+// Every field is a uint32_t so the serialized state has no padding.
 typedef struct {
   uint32_t position, leading, line_end, content_start, content_end, kind;
   uint32_t token_end, name_start, name_end;
   uint32_t next, next_end, prefix_end, prefix_kind;
   uint32_t set_end, set_close_end, class_start, range_operator_end;
   Item class, lower, upper;
-  bool quoted, component_start, after_separator;
+  uint32_t quoted, component_start, after_separator;
 } Scanner;
 
 typedef char scanner_fits_buffer
@@ -252,51 +253,50 @@ static Cursor cursor(Scanner *s, TSLexer *lexer, uint32_t limit) {
 static bool start_line(Scanner *s, TSLexer *lexer, const bool *valid) {
   if (lexer->eof(lexer))
     return false;
-  Scanner line;
-  memset(&line, 0, sizeof(line));
+  memset(s, 0, sizeof(*s));
+  s->class_start = NONE;
+  s->component_start = true;
   int32_t last = 0;
   lexer->mark_end(lexer);
   while (!lexer->eof(lexer) && whitespace(lexer->lookahead)) {
     last = lexer->lookahead;
-    advance(&line, lexer);
+    advance(s, lexer);
   }
-  line.leading = line.position;
-  line.kind = lexer->lookahead == '#' ? COMMENT_START : RULE_START;
-  line.quoted = lexer->lookahead == '"';
-  line.content_start = line.leading + (line.quoted ? 1 : 0);
-  line.content_end = NONE;
+  s->leading = s->position;
+  s->kind = lexer->lookahead == '#' ? COMMENT_START : RULE_START;
+  s->quoted = lexer->lookahead == '"';
+  s->content_start = s->leading + (s->quoted ? 1 : 0);
+  s->content_end = NONE;
   bool escaped = false;
   while (!lexer->eof(lexer) && lexer->lookahead != '\n') {
     int32_t c = lexer->lookahead;
-    if (line.position >= line.content_start && line.content_end == NONE) {
-      if (line.quoted) {
+    if (s->position >= s->content_start && s->content_end == NONE) {
+      if (s->quoted) {
         if (c == '"' && !escaped)
-          line.content_end = line.position;
+          s->content_end = s->position;
         escaped = c == '\\' && !escaped;
       } else if (whitespace(c))
-        line.content_end = line.position;
+        s->content_end = s->position;
     }
     last = c;
-    advance(&line, lexer);
+    advance(s, lexer);
   }
-  line.line_end = line.position;
+  s->line_end = s->position;
   if (last == '\r' && lexer->lookahead == '\n')
-    line.line_end--;
+    s->line_end--;
   // The CR of a CRLF ending is neither leading whitespace nor content.
-  if (line.leading > line.line_end)
-    line.leading = line.line_end;
-  if (line.content_end == NONE || line.content_end > line.line_end)
-    line.content_end = line.line_end;
-  if (line.leading >= line.line_end)
-    line.kind = BLANK_START;
-  line.position = 0;
-  line.class_start = NONE;
-  line.component_start = true;
-  *s = line;
+  if (s->leading > s->line_end)
+    s->leading = s->line_end;
+  if (s->content_end == NONE || s->content_end > s->line_end)
+    s->content_end = s->line_end;
+  if (s->leading >= s->line_end)
+    s->kind = BLANK_START;
+  s->position = 0;
   return emit(lexer, valid, LINE_START);
 }
 
-// Compare the macro marker after decoding C escapes.
+// Compare the macro marker after decoding C escapes; the opening quote is
+// passed as uncommitted lookahead.
 static bool start_content(Scanner *s, TSLexer *lexer, const bool *valid) {
   while (s->position < s->leading)
     advance(s, lexer);
@@ -632,6 +632,7 @@ static bool name_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
   Cursor r = cursor(s, lexer, s->name_end);
   enum Token token;
   if (r.kind == ESCAPE_PREFIX) {
+    // This token is the held backslash; the undecodable byte follows.
     s->next = INVALID_ENCODING;
     s->next_end = r.end + 1;
   }
@@ -657,19 +658,18 @@ static bool name_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
 
 static bool prepare_attribute(Scanner *s, TSLexer *lexer, const bool *valid) {
   lexer->mark_end(lexer);
-  uint32_t position = s->position;
-  bool modified = lexer->lookahead == '-' || lexer->lookahead == '!';
+  Cursor r = cursor(s, lexer, s->line_end);
+  bool modified = r.c == '-' || r.c == '!';
   s->name_start = s->position + (modified ? 1 : 0);
   s->name_end = NONE;
-  while (position < s->line_end && !whitespace(lexer->lookahead)) {
-    if (lexer->lookahead == '=' && s->name_end == NONE)
-      s->name_end = position;
-    lexer->advance(lexer, false);
-    position++;
+  while (r.c != -2 && !whitespace(r.c)) {
+    if (r.c == '=' && s->name_end == NONE)
+      s->name_end = r.start;
+    step(&r);
   }
-  s->token_end = position;
+  s->token_end = r.start;
   if (s->name_end == NONE)
-    s->name_end = position;
+    s->name_end = r.start;
   return emit(lexer, valid, ATTRIBUTE_START);
 }
 

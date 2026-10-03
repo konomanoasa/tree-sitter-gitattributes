@@ -96,7 +96,7 @@ export default grammar({
     ...issueKinds.map(([name]) => $[`_${name}`]),
     $._error_sentinel,
   ],
-  extras: () => [],
+  extras: ($) => [$._unmatchable],
   rules: {
     document: ($) =>
       repeat(
@@ -263,6 +263,8 @@ export default grammar({
         alias($._class_close, ":"),
         alias($._compound_close, "]"),
       ),
+    // Prevent Tree-sitter 0.27.0 from accepting EOF before the input ends.
+    _unmatchable: () => token(seq(/[\s\S]/, /[^\s\S]/)),
     ...issueRules,
   },
 });

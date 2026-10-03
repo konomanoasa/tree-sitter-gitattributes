@@ -1319,6 +1319,22 @@
         }
       ]
     },
+    "_unmatchable": {
+      "type": "TOKEN",
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "PATTERN",
+            "value": "[\\s\\S]"
+          },
+          {
+            "type": "PATTERN",
+            "value": "[^\\s\\S]"
+          }
+        ]
+      }
+    },
     "_missing_set_close_outcome": {
       "type": "ALIAS",
       "content": {
@@ -1590,7 +1606,12 @@
       "value": "invalid_syntax"
     }
   },
-  "extras": [],
+  "extras": [
+    {
+      "type": "SYMBOL",
+      "name": "_unmatchable"
+    }
+  ],
   "conflicts": [],
   "precedences": [],
   "externals": [
