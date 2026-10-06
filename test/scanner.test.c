@@ -86,7 +86,9 @@ static void test_internal_lexer_accepts_eof_only_at_input_end(void) {
   for (size_t index = 0; index < sizeof(input) / sizeof(input[0]); index += 1) {
     struct MockLexer mock;
     init_mock_lexer(&mock, input + index, 1);
-    assert(!ts_lex(&mock.lexer, 0));
+    assert(ts_lex(&mock.lexer, 0) == (input[index] == '\n'));
+    if (input[index] == '\n')
+      assert(mock.lexer.result_symbol == sym_line_ending);
     assert(mock.lexer.result_symbol != ts_builtin_sym_end);
   }
   struct MockLexer mock;
@@ -167,7 +169,6 @@ static void test_restored_comment_state_preserves_token_ranges(void) {
     {COMMENT_START, 0, 0},
     {COMMENT_MARKER, 0, 1},
     {COMMENT_TEXT, 1, 3},
-    {LINE_ENDING, 3, 5},
   };
   Scanner scanner = {0};
   for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index += 1) {
@@ -193,7 +194,7 @@ static void test_restored_comment_state_preserves_token_ranges(void) {
     );
     scanner = restored;
   }
-  assert(scanner.position == 5);
+  assert(scanner.position == 3);
 }
 
 // Every token is read from a state restored between calls.

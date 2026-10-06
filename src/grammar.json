@@ -35,6 +35,10 @@
         ]
       }
     },
+    "line_ending": {
+      "type": "PATTERN",
+      "value": "\\r?\\n"
+    },
     "_end": {
       "type": "SEQ",
       "members": [
@@ -487,6 +491,19 @@
                   "content": {
                     "type": "SYMBOL",
                     "name": "_invalid_name_character_issue"
+                  },
+                  "named": true,
+                  "value": "syntax_issue"
+                }
+              },
+              {
+                "type": "FIELD",
+                "name": "issue",
+                "content": {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_invalid_name_escape_issue"
                   },
                   "named": true,
                   "value": "syntax_issue"
@@ -1604,6 +1621,33 @@
       },
       "named": true,
       "value": "invalid_syntax"
+    },
+    "_invalid_name_escape_reason": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_invalid_name_escape"
+      },
+      "named": true,
+      "value": "quoted_escape"
+    },
+    "_invalid_name_escape_outcome": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_invalid_name_escape_reason"
+      },
+      "named": true,
+      "value": "invalid_name_character"
+    },
+    "_invalid_name_escape_issue": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_invalid_name_escape_outcome"
+      },
+      "named": true,
+      "value": "invalid_syntax"
     }
   },
   "extras": [
@@ -1638,10 +1682,6 @@
     {
       "type": "SYMBOL",
       "name": "_eof"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "line_ending"
     },
     {
       "type": "SYMBOL",
@@ -1866,6 +1906,10 @@
     {
       "type": "SYMBOL",
       "name": "_invalid_name_character"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_invalid_name_escape"
     },
     {
       "type": "SYMBOL",

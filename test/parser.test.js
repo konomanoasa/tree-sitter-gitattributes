@@ -7,8 +7,10 @@ import { test } from "node:test";
 import nodeTypes from "../src/node-types.json" with { type: "json" };
 import { issues, leaves, owners, parse } from "./support/parser.js";
 
-test("gitattributes: public issue nodes have one outcome and one reason leaf", () => {
+test("gitattributes: public issue nodes have one outcome and one reason", () => {
   const issue = nodeTypes.find(({ type }) => type === "syntax_issue");
+  assert.ok(issue);
+  assert.ok(issue.children);
   assert.equal(issue.children.required, true);
   assert.equal(issue.children.multiple, false);
   assert.deepEqual(
@@ -17,11 +19,22 @@ test("gitattributes: public issue nodes have one outcome and one reason leaf", (
   );
   for (const { type } of issue.children.types) {
     const outcome = nodeTypes.find((node) => node.type === type);
+    assert.ok(outcome, type);
+    assert.ok(outcome.children, type);
     assert.equal(outcome.children.required, true);
     assert.equal(outcome.children.multiple, false);
     for (const child of outcome.children.types) {
       const reason = nodeTypes.find((node) => node.type === child.type);
-      assert.equal(reason.children, undefined);
+      assert.ok(reason, child.type);
+      if (child.type === "invalid_name_character") {
+        assert.ok(reason.children);
+        assert.equal(reason.children.multiple, false);
+        assert.deepEqual(reason.children.types, [
+          { type: "quoted_escape", named: true },
+        ]);
+      } else {
+        assert.equal(reason.children, undefined);
+      }
     }
   }
 });
@@ -763,6 +776,27 @@ for (const [name, source, expected] of validCases)
 
 const invalidCases = [
   [
+    "contiguous forbidden attribute name characters form one issue",
+    "* a@@b",
+    [["invalid_syntax", "invalid_name_character", 3, 5]],
+    ["attribute_name"],
+  ],
+  [
+    "contiguous forbidden macro name characters form one issue",
+    "[attr]a@@b text",
+    [["invalid_syntax", "invalid_name_character", 7, 9]],
+    ["attribute_name"],
+  ],
+  [
+    "separate attribute owners keep separate invalid runs",
+    "* @@ @@",
+    [
+      ["invalid_syntax", "invalid_name_character", 2, 4],
+      ["invalid_syntax", "invalid_name_character", 5, 7],
+    ],
+    ["attribute_name", "attribute_name"],
+  ],
+  [
     "empty class does not close its outer set",
     "[[::]",
     [["incomplete_syntax", "missing_set_close", 5, 5]],
@@ -834,11 +868,8 @@ const invalidCases = [
   [
     "non-ASCII attribute names are invalid",
     "* 日本",
-    [
-      ["invalid_syntax", "invalid_name_character", 2, 5],
-      ["invalid_syntax", "invalid_name_character", 5, 8],
-    ],
-    ["attribute_name", "attribute_name"],
+    [["invalid_syntax", "invalid_name_character", 2, 8]],
+    ["attribute_name"],
   ],
   [
     "quoted macro with an invalid encoded name character",
@@ -1007,52 +1038,58 @@ const invalidCases = [
     ["pattern"],
   ],
   [
-    "decode failure within pattern",
-    Buffer.from([97, 255, 98]),
-    [["invalid_syntax", "invalid_encoding", 1, 2]],
+    "consecutive decode failures within pattern",
+    Buffer.from([97, 255, 254, 128, 98]),
+    [["invalid_syntax", "invalid_encoding", 1, 4]],
     ["pattern"],
   ],
   [
-    "decode failure within comment",
-    Buffer.from([35, 255, 98]),
-    [["invalid_syntax", "invalid_encoding", 1, 2]],
+    "consecutive decode failures within comment",
+    Buffer.from([35, 255, 254, 128, 98]),
+    [["invalid_syntax", "invalid_encoding", 1, 4]],
     ["comment"],
   ],
   [
-    "decode failure within name",
-    Buffer.from([97, 32, 110, 255, 109]),
-    [["invalid_syntax", "invalid_encoding", 3, 4]],
+    "consecutive decode failures within name",
+    Buffer.from([97, 32, 110, 255, 254, 128, 109]),
+    [["invalid_syntax", "invalid_encoding", 3, 6]],
     ["attribute_name"],
   ],
   [
-    "decode failure within value",
-    Buffer.from([97, 32, 110, 61, 118, 255, 120]),
-    [["invalid_syntax", "invalid_encoding", 5, 6]],
+    "consecutive decode failures within value",
+    Buffer.from([97, 32, 110, 61, 118, 255, 254, 128, 120]),
+    [["invalid_syntax", "invalid_encoding", 5, 8]],
     ["attribute_value"],
   ],
   [
-    "decode failure after glob escape",
-    Buffer.from([92, 255, 98]),
-    [["invalid_syntax", "invalid_encoding", 1, 2]],
+    "consecutive decode failures after glob escape",
+    Buffer.from([92, 255, 254, 128, 98]),
+    [["invalid_syntax", "invalid_encoding", 1, 4]],
     ["pattern"],
   ],
   [
-    "decode failure after C escape prefix",
-    Buffer.from([34, 92, 255, 98, 34]),
-    [["invalid_syntax", "invalid_encoding", 2, 3]],
+    "consecutive decode failures after C escape prefix",
+    Buffer.from([34, 92, 255, 254, 128, 98, 34]),
+    [["invalid_syntax", "invalid_encoding", 2, 5]],
     ["pattern"],
   ],
   [
-    "decode failure stays inside the character set",
-    Buffer.from([91, 97, 255, 93]),
-    [["invalid_syntax", "invalid_encoding", 2, 3]],
+    "consecutive decode failures stay inside the character set",
+    Buffer.from([91, 97, 255, 254, 128, 93]),
+    [["invalid_syntax", "invalid_encoding", 2, 5]],
     ["character_set"],
   ],
   [
-    "decode failure after a glob escape and a C escape prefix",
-    Buffer.from([34, 92, 92, 92, 255, 34]),
-    [["invalid_syntax", "invalid_encoding", 4, 5]],
+    "consecutive decode failures after a glob escape and a C escape prefix",
+    Buffer.from([34, 92, 92, 92, 255, 254, 128, 34]),
+    [["invalid_syntax", "invalid_encoding", 4, 7]],
     ["pattern"],
+  ],
+  [
+    "consecutive decode failures stop before a character class delimiter",
+    Buffer.from([91, 91, 58, 100, 255, 254, 128, 58, 93, 93]),
+    [["invalid_syntax", "invalid_encoding", 4, 7]],
+    ["character_class"],
   ],
 ];
 for (const [name, source, expected, expectedOwners] of invalidCases)
@@ -1063,6 +1100,34 @@ for (const [name, source, expected, expectedOwners] of invalidCases)
     for (const node of tree.filter(({ kind }) => kind === "syntax_issue"))
       assert.equal(node.field, "issue");
   });
+
+test("gitattributes: invalid macro name characters preserve valid quoted escapes", () => {
+  const source = String.raw`"[attr]a\044b\tc" text`;
+  const nodes = parse(source);
+  assert.deepEqual(issues(nodes), [
+    ["invalid_syntax", "invalid_name_character", 8, 12],
+    ["invalid_syntax", "invalid_name_character", 13, 15],
+  ]);
+  assert.deepEqual(owners(nodes), ["attribute_name", "attribute_name"]);
+  assert.deepEqual(
+    nodes
+      .filter(({ kind }) => kind === "quoted_escape")
+      .map(({ parent, start, end }) => [nodes[parent].kind, start, end]),
+    [
+      ["invalid_name_character", 8, 12],
+      ["invalid_name_character", 13, 15],
+    ],
+  );
+  assert.deepEqual(
+    leaves(source, nodes).filter(([kind]) => kind === "name_text"),
+    [
+      ["name_text", "a"],
+      ["name_text", "b"],
+      ["name_text", "c"],
+      ["name_text", "text"],
+    ],
+  );
+});
 
 test("gitattributes: line ranges include indentation separators and terminators", () => {
   const source = "  a text \r\n\t[attr]binary -text\n";
@@ -1180,9 +1245,11 @@ for (const [name, source, owner, expected] of compoundCases) {
         .map(({ kind, field, start, end }) => [kind, field, start, end]),
       expected,
     );
+    const last = expected.at(-1);
+    assert.ok(last);
     assert.deepEqual(
       [nodes[index].start, nodes[index].end],
-      [expected[0][2], expected.at(-1)[3]],
+      [expected[0][2], last[3]],
     );
   });
 }
@@ -1193,6 +1260,8 @@ test("gitattributes: compound delimiters are anonymous and have no opening or cl
   }
   for (const type of ["character_class"]) {
     const node = nodeTypes.find((node) => node.type === type);
+    assert.ok(node, type);
+    assert.ok(node.fields, type);
     assert.deepEqual(Object.keys(node.fields), ["issue", "name"]);
   }
 });
@@ -1220,23 +1289,58 @@ test("gitattributes: Git runtime checks the documented supplementary cases", (t)
     );
     assert.equal(run(["init", "--quiet"]).status, 0);
     const cases = [
-      ['"[attr]foo" audit_probe\n* foo\n', "audit_probe", "set", 0],
-      [
-        String.raw`"\133attr]\146oo" audit_probe
+      {
+        source: '"[attr]foo" audit_probe\n* foo\n',
+        attribute: "audit_probe",
+        value: "set",
+        count: 0,
+      },
+      {
+        source: String.raw`"\133attr]\146oo" audit_probe
 * foo
 `,
-        "audit_probe",
-        "set",
-        0,
-      ],
-      ["* -name=value\n", "name", "unset", 0],
-      ["* !name=value\n", "name", "unspecified", 0],
-      ["* bad$name audit_probe\n", "audit_probe", "unspecified", 1],
-      ["* 日本 audit_probe\n", "audit_probe", "unspecified", 2],
-      ["* --name audit_probe\n", "audit_probe", "unspecified", 1],
-      ["* _name .name 1name foo-bar audit_probe\n", "audit_probe", "set", 0],
+        attribute: "audit_probe",
+        value: "set",
+        count: 0,
+      },
+      {
+        source: "* -name=value\n",
+        attribute: "name",
+        value: "unset",
+        count: 0,
+      },
+      {
+        source: "* !name=value\n",
+        attribute: "name",
+        value: "unspecified",
+        count: 0,
+      },
+      {
+        source: "* bad$name audit_probe\n",
+        attribute: "audit_probe",
+        value: "unspecified",
+        count: 1,
+      },
+      {
+        source: "* 日本 audit_probe\n",
+        attribute: "audit_probe",
+        value: "unspecified",
+        count: 1,
+      },
+      {
+        source: "* --name audit_probe\n",
+        attribute: "audit_probe",
+        value: "unspecified",
+        count: 1,
+      },
+      {
+        source: "* _name .name 1name foo-bar audit_probe\n",
+        attribute: "audit_probe",
+        value: "set",
+        count: 0,
+      },
     ];
-    for (const [source, attribute, value, count] of cases) {
+    for (const { source, attribute, value, count } of cases) {
       writeFileSync(join(directory, ".gitattributes"), source);
       const result = run(["check-attr", "-z", attribute, "--", "a"]);
       assert.equal(result.status, 0, result.stderr);
@@ -1245,33 +1349,65 @@ test("gitattributes: Git runtime checks the documented supplementary cases", (t)
       if (count) assert.match(result.stderr, /not a valid attribute name/);
     }
     const patterns = [
-      [String.raw`"[a\055[:alpha:]]"`, ["a", "a]", "l]", "z]"], ["a]", "l]"]],
-      [
-        "[a-[:digit:]]",
-        ["a", "1", "-", "a]", "d]", ":]", "1]"],
-        ["a]", "d]", ":]"],
-      ],
-      ["[A-[:digit:]]", ["A]", "Z]", "[]", "1"], ["A]", "Z]", "[]"]],
-      ["[]-[:digit:]]", ["]]", "d]", "1"], ["]]", "d]"]],
-      ["[a-b-[:digit:]]", ["a", "b", "-", "1", "d]"], ["a", "b", "-", "1"]],
-      ["[[:alpha:]A-[:digit:]]", ["a]", "Z]", "1"], ["a]", "Z]"]],
-      [
-        "[[:a-\\]-[:digit:]]",
-        ["1", "[", "a", "-", "1]", "d]"],
-        ["1", "[", "a", "-"],
-      ],
-      ['"[A-\\133:digit:]]"', ["A]", "Z]", "[]", "1"], ["A]", "Z]", "[]"]],
-      ["[[:]]", ["a", "[]", ":]"], ["[]", ":]"]],
-      ["[[::]]", ["a", "[]", ":]"], []],
-      ["[a[::]]", ["a", "[]", ":]"], []],
-      ["[![::]]", ["a", "[]", ":]"], []],
-      ["[[:unknown:]]", ["a", "[]", ":]"], []],
-      ["[a[:unknown:]]", ["a", "[]", ":]"], []],
-      ["[![:unknown:]]", ["a", "[]", ":]"], []],
-      [String.raw`"[\133\072\072\135]"`, ["a", "[]", ":]"], []],
-      ["a/***/b", ["a/b", "a/x/b", "a/x/y/b"], ["a/b", "a/x/b", "a/x/y/b"]],
+      {
+        pattern: String.raw`"[a\055[:alpha:]]"`,
+        paths: ["a", "a]", "l]", "z]"],
+        expected: ["a]", "l]"],
+      },
+      {
+        pattern: "[a-[:digit:]]",
+        paths: ["a", "1", "-", "a]", "d]", ":]", "1]"],
+        expected: ["a]", "d]", ":]"],
+      },
+      {
+        pattern: "[A-[:digit:]]",
+        paths: ["A]", "Z]", "[]", "1"],
+        expected: ["A]", "Z]", "[]"],
+      },
+      {
+        pattern: "[]-[:digit:]]",
+        paths: ["]]", "d]", "1"],
+        expected: ["]]", "d]"],
+      },
+      {
+        pattern: "[a-b-[:digit:]]",
+        paths: ["a", "b", "-", "1", "d]"],
+        expected: ["a", "b", "-", "1"],
+      },
+      {
+        pattern: "[[:alpha:]A-[:digit:]]",
+        paths: ["a]", "Z]", "1"],
+        expected: ["a]", "Z]"],
+      },
+      {
+        pattern: "[[:a-\\]-[:digit:]]",
+        paths: ["1", "[", "a", "-", "1]", "d]"],
+        expected: ["1", "[", "a", "-"],
+      },
+      {
+        pattern: '"[A-\\133:digit:]]"',
+        paths: ["A]", "Z]", "[]", "1"],
+        expected: ["A]", "Z]", "[]"],
+      },
+      { pattern: "[[:]]", paths: ["a", "[]", ":]"], expected: ["[]", ":]"] },
+      { pattern: "[[::]]", paths: ["a", "[]", ":]"], expected: [] },
+      { pattern: "[a[::]]", paths: ["a", "[]", ":]"], expected: [] },
+      { pattern: "[![::]]", paths: ["a", "[]", ":]"], expected: [] },
+      { pattern: "[[:unknown:]]", paths: ["a", "[]", ":]"], expected: [] },
+      { pattern: "[a[:unknown:]]", paths: ["a", "[]", ":]"], expected: [] },
+      { pattern: "[![:unknown:]]", paths: ["a", "[]", ":]"], expected: [] },
+      {
+        pattern: String.raw`"[\133\072\072\135]"`,
+        paths: ["a", "[]", ":]"],
+        expected: [],
+      },
+      {
+        pattern: "a/***/b",
+        paths: ["a/b", "a/x/b", "a/x/y/b"],
+        expected: ["a/b", "a/x/b", "a/x/y/b"],
+      },
     ];
-    for (const [pattern, paths, expected] of patterns) {
+    for (const { pattern, paths, expected } of patterns) {
       writeFileSync(
         join(directory, ".gitattributes"),
         `${pattern} audit_probe\n`,

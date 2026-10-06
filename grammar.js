@@ -14,10 +14,22 @@ const issueKinds = [
   ["missing_name", "invalid_syntax", "missing_attribute_name"],
   ["incomplete_name", "incomplete_syntax", "missing_attribute_name"],
   ["invalid_name_character", "invalid_syntax", "invalid_name_character"],
+  [
+    "invalid_name_escape",
+    "invalid_syntax",
+    "invalid_name_character",
+    "quoted_escape",
+  ],
 ];
 const issueRules = Object.fromEntries(
-  issueKinds.flatMap(([token, outcome, reason]) => [
-    [`_${token}_outcome`, ($) => alias($[`_${token}`], $[reason])],
+  issueKinds.flatMap(([token, outcome, reason, child]) => [
+    ...(child
+      ? [[`_${token}_reason`, ($) => alias($[`_${token}`], $[child])]]
+      : []),
+    [
+      `_${token}_outcome`,
+      ($) => alias($[child ? `_${token}_reason` : `_${token}`], $[reason]),
+    ],
     [`_${token}_issue`, ($) => alias($[`_${token}_outcome`], $[outcome])],
   ]),
 );
@@ -51,7 +63,6 @@ export default grammar({
     $._rule_start,
     $._macro_start,
     $._eof,
-    $.line_ending,
     $._layout,
     $._separator,
     $._attribute_start,
@@ -105,6 +116,7 @@ export default grammar({
           choice($.blank_line, $.comment, $.attribute_rule, $.macro_definition),
         ),
       ),
+    line_ending: () => /\r?\n/,
     _end: ($) => seq(optional($._layout), choice($.line_ending, $._eof)),
     blank_line: ($) => seq($._blank_start, $._end),
     comment: ($) =>
@@ -161,6 +173,7 @@ export default grammar({
               $,
               "invalid_encoding",
               "invalid_name_character",
+              "invalid_name_escape",
               ...quotedEscapeIssues,
             ),
             heldPrefix($, "invalid_encoding"),

@@ -9,7 +9,6 @@ enum Token {
   RULE_START,
   MACRO_START,
   END_OF_FILE,
-  LINE_ENDING,
   LAYOUT,
   SEPARATOR,
   ATTRIBUTE_START,
@@ -66,6 +65,7 @@ enum Token {
   MISSING_NAME,
   INCOMPLETE_NAME,
   INVALID_NAME_CHARACTER,
+  INVALID_NAME_ESCAPE,
   ERROR_SENTINEL
 };
 
@@ -152,12 +152,11 @@ static bool text_run(
   enum Token token,
   uint32_t end
 ) {
-  if (lexer->lookahead == -1)
-    return consume(s, lexer, valid, INVALID_ENCODING, s->position + 1);
-  while (s->position < end && lexer->lookahead != -1)
+  const bool invalid = lexer->lookahead == -1;
+  while (s->position < end && (lexer->lookahead == -1) == invalid)
     advance(s, lexer);
   lexer->mark_end(lexer);
-  return emit(lexer, valid, token);
+  return emit(lexer, valid, invalid ? INVALID_ENCODING : token);
 }
 
 static void raw_step(Cursor *r) {
@@ -176,8 +175,11 @@ static void step(Cursor *r) {
   int32_t c = r->lexer->lookahead;
   raw_step(r);
   r->c = c;
-  if (c == -1)
+  if (c == -1) {
     r->kind = INVALID_ENCODING;
+    while (r->raw < r->limit && r->lexer->lookahead == -1)
+      raw_step(r);
+  }
   if (r->s->quoted && r->start < r->s->content_end && c == '\\') {
     r->kind = QUOTED_ESCAPE;
     c = r->lexer->lookahead;
@@ -639,14 +641,17 @@ static bool name_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
   if (r.c < 0)
     token = (enum Token)r.kind;
   else if (!name_character(r.c, s->position == s->name_start))
-    token = INVALID_NAME_CHARACTER;
+    token =
+      r.kind == QUOTED_ESCAPE ? INVALID_NAME_ESCAPE : INVALID_NAME_CHARACTER;
   else
     token = r.kind == QUOTED_ESCAPE ? QUOTED_ESCAPE : NAME_TEXT;
   uint32_t end = r.end;
   lexer->mark_end(lexer);
-  if (token == NAME_TEXT) {
+  if (token == NAME_TEXT || token == INVALID_NAME_CHARACTER) {
     step(&r);
-    while (r.c >= 0 && !r.kind && name_character(r.c, false)) {
+    while (
+      r.c >= 0 && !r.kind && name_character(r.c, false) == (token == NAME_TEXT)
+    ) {
       end = r.end;
       lexer->mark_end(lexer);
       step(&r);
@@ -726,17 +731,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
   }
   if (valid[PATTERN_END] && s->position >= s->content_end)
     return emit(lexer, valid, PATTERN_END);
-  if (s->position >= s->line_end) {
-    if (lexer->eof(lexer))
-      return emit(lexer, valid, END_OF_FILE);
-    if (lexer->lookahead == '\r')
-      advance(s, lexer);
-    if (lexer->lookahead != '\n')
-      return false;
-    advance(s, lexer);
-    lexer->mark_end(lexer);
-    return emit(lexer, valid, LINE_ENDING);
-  }
+  if (s->position >= s->line_end)
+    return lexer->eof(lexer) && emit(lexer, valid, END_OF_FILE);
   if (s->kind == COMMENT_START) {
     if (s->position == s->leading)
       return consume(s, lexer, valid, COMMENT_MARKER, s->position + 1);
