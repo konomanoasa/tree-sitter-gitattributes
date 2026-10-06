@@ -197,7 +197,6 @@ static void test_restored_comment_state_preserves_token_ranges(void) {
   assert(scanner.position == 3);
 }
 
-// Every token is read from a state restored between calls.
 static void test_restored_glob_state_preserves_token_ranges(void) {
   const int32_t input[] =
     {'[', '^', 'a', ']', '[', '[', ':', 'd', ':', ']', ']', '['};

@@ -26,24 +26,25 @@ for (const [owner, prefix, suffix] of [
   ["comment", "# a", "b"],
   ["class", "[[:di", ":]] text"],
 ]) {
-  test(`gitattributes: splitting the character after a decoding failure merges the issue in ${owner}`, () => {
-    const source = Buffer.concat([
-      Buffer.from(prefix),
-      Buffer.from([255]),
-      Buffer.from(`é${suffix}`),
-    ]);
-    const edits = [
-      { byte: Buffer.byteLength(prefix) + 2, deleteBytes: 1, insert: "" },
-    ];
-    const incremental = parse(source, edits);
-    assert.deepEqual(incremental, parse(applyEdits(source, edits)));
-    assert.deepEqual(
-      incremental
-        .filter(({ kind }) => kind === "syntax_issue")
-        .map(({ start, end }) => [start, end]),
-      [[Buffer.byteLength(prefix), Buffer.byteLength(prefix) + 2]],
-    );
-  });
+  for (const bom of ["", "\uFEFF"]) {
+    test(`gitattributes: splitting the character after a decoding failure merges the issue in ${owner}${bom && " after a BOM"}`, () => {
+      const offset = Buffer.byteLength(bom + prefix);
+      const source = Buffer.concat([
+        Buffer.from(bom + prefix),
+        Buffer.from([255]),
+        Buffer.from(`é${suffix}`),
+      ]);
+      const edits = [{ byte: offset + 2, deleteBytes: 1, insert: "" }];
+      const incremental = parse(source, edits);
+      assert.deepEqual(incremental, parse(applyEdits(source, edits)));
+      assert.deepEqual(
+        incremental
+          .filter(({ kind }) => kind === "syntax_issue")
+          .map(({ start, end }) => [start, end]),
+        [[offset, offset + 2]],
+      );
+    });
+  }
 }
 
 const histories = [
@@ -288,3 +289,90 @@ test("gitattributes: fixed-seed generated histories preserve source structure an
     }
   }
 });
+
+const escapedSeparatorHistories = [
+  {
+    name: "change the escaped slash before double asterisk",
+    source: "x\\/**/b",
+    edits: [
+      { byte: 2, deleteBytes: 1, insert: "a" },
+      { byte: 2, deleteBytes: 1, insert: "/" },
+      { byte: 1, deleteBytes: 1, insert: "" },
+      { byte: 1, deleteBytes: 0, insert: "\\" },
+    ],
+    expected: [
+      "wildcard",
+      "recursive_wildcard",
+      "recursive_wildcard",
+      "recursive_wildcard",
+    ],
+  },
+  {
+    name: "change the escaped slash after double asterisk",
+    source: "x/**b",
+    edits: [
+      { byte: 4, deleteBytes: 0, insert: "\\/" },
+      { byte: 5, deleteBytes: 1, insert: "a" },
+      { byte: 5, deleteBytes: 1, insert: "/" },
+      { byte: 4, deleteBytes: 1, insert: "" },
+    ],
+    expected: [
+      "recursive_wildcard",
+      "wildcard",
+      "recursive_wildcard",
+      "recursive_wildcard",
+    ],
+  },
+  {
+    name: "change backslash parity before the following slash",
+    source: "x/**\\/b",
+    edits: [
+      { byte: 4, deleteBytes: 0, insert: "\\" },
+      { byte: 4, deleteBytes: 1, insert: "" },
+    ],
+    expected: ["wildcard", "recursive_wildcard"],
+  },
+  {
+    name: "extend and restore the double asterisk run",
+    source: "x\\/**\\/b",
+    edits: [
+      { byte: 3, deleteBytes: 0, insert: "*" },
+      { byte: 3, deleteBytes: 1, insert: "" },
+    ],
+    expected: ["wildcard", "recursive_wildcard"],
+  },
+  {
+    name: "change octal separators around encoded double asterisk",
+    source: '"x\\134\\057\\052\\052\\134\\057b"',
+    edits: [
+      { byte: 23, deleteBytes: 3, insert: "141" },
+      { byte: 23, deleteBytes: 3, insert: "057" },
+      { byte: 7, deleteBytes: 3, insert: "141" },
+      { byte: 7, deleteBytes: 3, insert: "057" },
+    ],
+    expected: [
+      "wildcard",
+      "recursive_wildcard",
+      "wildcard",
+      "recursive_wildcard",
+    ],
+  },
+];
+for (const { name, source, edits, expected } of escapedSeparatorHistories) {
+  test(`gitattributes: ${name}`, () => {
+    for (let length = 1; length <= edits.length; length++) {
+      const history = edits.slice(0, length);
+      const incremental = parse(source, history);
+      assert.deepEqual(incremental, parse(applyEdits(source, history)));
+      assert.deepEqual(issues(incremental), []);
+      assert.deepEqual(
+        incremental
+          .filter(
+            ({ kind }) => kind === "wildcard" || kind === "recursive_wildcard",
+          )
+          .map(({ kind }) => kind),
+        [expected[length - 1]],
+      );
+    }
+  });
+}

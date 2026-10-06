@@ -58,7 +58,6 @@ function renderedCaptures(html, source) {
 function createHighlighter({ directory, root, run, captureNames }) {
   const parserDirectory = join(directory, "parsers");
   mkdirSync(parserDirectory);
-  // CLI discovery requires a tree-sitter-* entry even when the checkout is renamed.
   symlinkSync(root, join(parserDirectory, "tree-sitter-test"), "junction");
   const configPath = join(directory, "highlight.json");
   const capturePath = join(directory, "captures.txt");
@@ -125,7 +124,6 @@ function assertCaptures(source, actual, ranges) {
     expected.fill(capture, start, end);
     previousEnd = end;
   }
-  // HTML emits line breaks outside spans.
   for (const [index, byte] of bytes.entries()) {
     if (byte !== 10)
       assert.equal(
@@ -184,6 +182,30 @@ function assertCommand(arguments_) {
 const grammar = grammars[0];
 
 const finalCaptureCases = [
+  {
+    name: "escaped separators retain their own captures around a recursive wildcard",
+    source: "x\\/**\\/b",
+    captures: [
+      [0, 1, "string.special.path"],
+      [1, 3, "string.escape"],
+      [3, 5, "character.special"],
+      [5, 7, "string.escape"],
+      [7, 8, "string.special.path"],
+    ],
+  },
+  {
+    name: "octal escaped separators retain their original capture ranges",
+    source: '"x\\134\\057\\052\\052\\134\\057b"',
+    captures: [
+      [0, 1, "string"],
+      [1, 2, "string.special.path"],
+      [2, 10, "string.escape"],
+      [10, 18, "character.special"],
+      [18, 26, "string.escape"],
+      [26, 27, "string.special.path"],
+      [27, 28, "string"],
+    ],
+  },
   {
     name: "empty class highlights only existing delimiters",
     source: "[[::]]",

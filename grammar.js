@@ -21,6 +21,12 @@ const issueKinds = [
     "quoted_escape",
   ],
 ];
+const quotedEscapeIssues = [
+  "invalid_quoted_escape",
+  "ended_quoted_escape",
+  "incomplete_quoted_escape",
+];
+
 const issueRules = Object.fromEntries(
   issueKinds.flatMap(([token, outcome, reason, child]) => [
     ...(child
@@ -36,14 +42,8 @@ const issueRules = Object.fromEntries(
 const issue = ($, name) =>
   field("issue", alias($[`_${name}_issue`], $.syntax_issue));
 const issues = ($, ...names) => names.map((name) => issue($, name));
-// A backslash held by the owner before the issue of the unit it cannot escape.
 const heldPrefix = ($, ...names) =>
   seq($._escape_prefix, choice(...issues($, ...names)));
-const quotedEscapeIssues = [
-  "invalid_quoted_escape",
-  "ended_quoted_escape",
-  "incomplete_quoted_escape",
-];
 const missingName = ($) =>
   choice(...issues($, "missing_name", "incomplete_name"));
 const quoteClose = ($) =>
@@ -107,7 +107,7 @@ export default grammar({
     ...issueKinds.map(([name]) => $[`_${name}`]),
     $._error_sentinel,
   ],
-  extras: ($) => [$._unmatchable],
+  extras: () => [],
   rules: {
     document: ($) =>
       repeat(
@@ -276,8 +276,6 @@ export default grammar({
         alias($._class_close, ":"),
         alias($._compound_close, "]"),
       ),
-    // Prevent Tree-sitter 0.27.0 from accepting EOF before the input ends.
-    _unmatchable: () => token(seq(/[\s\S]/, /[^\s\S]/)),
     ...issueRules,
   },
 });

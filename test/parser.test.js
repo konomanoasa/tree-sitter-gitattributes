@@ -41,6 +41,158 @@ test("gitattributes: public issue nodes have one outcome and one reason", () => 
 
 const validCases = [
   [
+    "escaped slash before a recursive wildcard",
+    "x\\/**/b",
+    [
+      ["glob_literal", "x"],
+      ["escape", "\\/"],
+      ["recursive_wildcard", "**"],
+      ["path_separator", "/"],
+      ["glob_literal", "b"],
+    ],
+  ],
+  [
+    "escaped slash after a recursive wildcard",
+    "x/**\\/b",
+    [
+      ["glob_literal", "x"],
+      ["path_separator", "/"],
+      ["recursive_wildcard", "**"],
+      ["escape", "\\/"],
+      ["glob_literal", "b"],
+    ],
+  ],
+  [
+    "escaped slashes around a recursive wildcard",
+    "x\\/**\\/b",
+    [
+      ["glob_literal", "x"],
+      ["escape", "\\/"],
+      ["recursive_wildcard", "**"],
+      ["escape", "\\/"],
+      ["glob_literal", "b"],
+    ],
+  ],
+  [
+    "leading recursive wildcard before an escaped slash",
+    "**\\/b",
+    [
+      ["recursive_wildcard", "**"],
+      ["escape", "\\/"],
+      ["glob_literal", "b"],
+    ],
+  ],
+  [
+    "escaped nonseparator does not start a component",
+    "x\\a**/b",
+    [
+      ["glob_literal", "x"],
+      ["escape", "\\a"],
+      ["wildcard", "**"],
+      ["path_separator", "/"],
+      ["glob_literal", "b"],
+    ],
+  ],
+  [
+    "escaped nonseparator does not end a component",
+    "x/**\\a/b",
+    [
+      ["glob_literal", "x"],
+      ["path_separator", "/"],
+      ["wildcard", "**"],
+      ["escape", "\\a"],
+      ["path_separator", "/"],
+      ["glob_literal", "b"],
+    ],
+  ],
+  [
+    "escaped backslash before slash does not end a component",
+    "x/**\\\\/b",
+    [
+      ["glob_literal", "x"],
+      ["path_separator", "/"],
+      ["wildcard", "**"],
+      ["escape", "\\\\"],
+      ["path_separator", "/"],
+      ["glob_literal", "b"],
+    ],
+  ],
+  [
+    "escaped slash does not make three asterisks recursive",
+    "x\\/***/b",
+    [
+      ["glob_literal", "x"],
+      ["escape", "\\/"],
+      ["wildcard", "***"],
+      ["path_separator", "/"],
+      ["glob_literal", "b"],
+    ],
+  ],
+  [
+    "slash inside a set does not start a component",
+    "[\\/]**/b",
+    [
+      ["set_open", "["],
+      ["escape", "\\/"],
+      ["set_close", "]"],
+      ["wildcard", "**"],
+      ["path_separator", "/"],
+      ["glob_literal", "b"],
+    ],
+  ],
+  [
+    "C-quoted escaped slash before a recursive wildcard",
+    '"x\\\\/**/b"',
+    [
+      ["quote_open", '"'],
+      ["glob_literal", "x"],
+      ["escape", "\\\\/"],
+      ["recursive_wildcard", "**"],
+      ["path_separator", "/"],
+      ["glob_literal", "b"],
+      ["quote_close", '"'],
+    ],
+  ],
+  [
+    "C-quoted escaped slash after a recursive wildcard",
+    '"x/**\\\\/b"',
+    [
+      ["quote_open", '"'],
+      ["glob_literal", "x"],
+      ["path_separator", "/"],
+      ["recursive_wildcard", "**"],
+      ["escape", "\\\\/"],
+      ["glob_literal", "b"],
+      ["quote_close", '"'],
+    ],
+  ],
+  [
+    "C-quoted escaped slashes around a recursive wildcard",
+    '"x\\\\/**\\\\/b"',
+    [
+      ["quote_open", '"'],
+      ["glob_literal", "x"],
+      ["escape", "\\\\/"],
+      ["recursive_wildcard", "**"],
+      ["escape", "\\\\/"],
+      ["glob_literal", "b"],
+      ["quote_close", '"'],
+    ],
+  ],
+  [
+    "octal spellings preserve escaped separator boundaries",
+    '"x\\134\\057\\052\\052\\134\\057b"',
+    [
+      ["quote_open", '"'],
+      ["glob_literal", "x"],
+      ["escape", "\\134\\057"],
+      ["recursive_wildcard", "\\052\\052"],
+      ["escape", "\\134\\057"],
+      ["glob_literal", "b"],
+      ["quote_close", '"'],
+    ],
+  ],
+  [
     "empty class retains its four delimiters without a name",
     "[[::]]",
     [
@@ -420,11 +572,11 @@ const validCases = [
     ],
   ],
   [
-    "escaped slash does not anchor a recursive wildcard",
+    "escaped slash starts a trailing recursive wildcard",
     "\\/**",
     [
       ["escape", "\\/"],
-      ["wildcard", "**"],
+      ["recursive_wildcard", "**"],
     ],
   ],
   [
@@ -1156,14 +1308,30 @@ test("gitattributes: quoted bracket remains an escape inside an incomplete set",
   ]);
 });
 
-test("gitattributes: backslashes before a decode failure are held without an escape", () => {
-  const source = Buffer.from([34, 92, 92, 92, 255, 34]);
-  assert.deepEqual(leaves(source, parse(source)), [
-    ["quote_open", '"'],
-    ["invalid_encoding", Buffer.from([255]).toString()],
-    ["quote_close", '"'],
-  ]);
-});
+for (const { owner, prefix, before } of [
+  { owner: "pattern", prefix: '"\\\\\\', before: [["quote_open", '"']] },
+  {
+    owner: "macro name",
+    prefix: '"[attr]a\\',
+    before: [
+      ["quote_open", '"'],
+      ["macro_marker", "[attr]"],
+      ["name_text", "a"],
+    ],
+  },
+]) {
+  test(`gitattributes: backslashes before a decode failure in a ${owner} are held without an escape`, () => {
+    const source = Buffer.concat([
+      Buffer.from(prefix),
+      Buffer.from([255, 254, 34]),
+    ]);
+    assert.deepEqual(leaves(source, parse(source)), [
+      ...before,
+      ["invalid_encoding", Buffer.from([255, 254]).toString()],
+      ["quote_close", '"'],
+    ]);
+  });
+}
 
 test("gitattributes: decoded glob escape cannot hide a following invalid quoted escape", () => {
   const source = String.raw`"\\\q" text`;
@@ -1285,7 +1453,7 @@ test("gitattributes: Git runtime checks the documented supplementary cases", (t)
     const version = run(["--version"]);
     assert.equal(version.status, 0, version.stderr);
     t.diagnostic(
-      `Supplementary behavior established with Git 2.55.0; checked with ${version.stdout.trim()}`,
+      `Supplementary behavior established with Git 2.55.0 (escaped-slash boundaries: Git 2.56.0); checked with ${version.stdout.trim()}`,
     );
     assert.equal(run(["init", "--quiet"]).status, 0);
     const cases = [
@@ -1349,6 +1517,51 @@ test("gitattributes: Git runtime checks the documented supplementary cases", (t)
       if (count) assert.match(result.stderr, /not a valid attribute name/);
     }
     const patterns = [
+      {
+        pattern: "x\\/**/b",
+        paths: ["x/b", "x/y/b", "x/y/z/b"],
+        expected: ["x/b", "x/y/b", "x/y/z/b"],
+      },
+      {
+        pattern: "x/**\\/b",
+        paths: ["x/b", "x/y/b", "x/y/z/b"],
+        expected: ["x/y/b", "x/y/z/b"],
+      },
+      {
+        pattern: "**\\/b",
+        paths: ["b", "x/b", "x/y/b"],
+        expected: ["x/b", "x/y/b"],
+      },
+      {
+        pattern: "x\\/*/b",
+        paths: ["x/b", "x/y/b", "x/y/z/b"],
+        expected: ["x/y/b"],
+      },
+      {
+        pattern: "x/*\\/b",
+        paths: ["x/b", "x/y/b", "x/y/z/b"],
+        expected: ["x/y/b"],
+      },
+      {
+        pattern: '"x\\\\/**/b"',
+        paths: ["x/b", "x/y/b", "x/y/z/b"],
+        expected: ["x/b", "x/y/b", "x/y/z/b"],
+      },
+      {
+        pattern: '"x/**\\\\/b"',
+        paths: ["x/b", "x/y/b", "x/y/z/b"],
+        expected: ["x/y/b", "x/y/z/b"],
+      },
+      {
+        pattern: '"**\\\\/b"',
+        paths: ["b", "x/b", "x/y/b"],
+        expected: ["x/b", "x/y/b"],
+      },
+      {
+        pattern: '"x\\134\\057\\052\\052\\134\\057b"',
+        paths: ["x/b", "x/y/b", "x/y/z/b"],
+        expected: ["x/y/b", "x/y/z/b"],
+      },
       {
         pattern: String.raw`"[a\055[:alpha:]]"`,
         paths: ["a", "a]", "l]", "z]"],
@@ -1447,3 +1660,114 @@ for (const [name, source, expectedIssues] of largeInputCases)
   test(`gitattributes: large input: ${name}`, () => {
     assert.equal(issues(parse(source)).length, expectedIssues);
   });
+
+test("gitattributes: octal range endpoints retain individual source escapes", () => {
+  const source = String.raw`"[\303\251-z]"`;
+  const nodes = parse(source);
+  assert.deepEqual(issues(nodes), []);
+  assert.deepEqual(leaves(source, nodes), [
+    ["quote_open", '"'],
+    ["set_open", "["],
+    ["quoted_escape", String.raw`\303`],
+    ["quoted_escape", String.raw`\251`],
+    ["range_operator", "-"],
+    ["range_character", "z"],
+    ["set_close", "]"],
+    ["quote_close", '"'],
+  ]);
+  const rangeIndex = nodes.findIndex(({ kind }) => kind === "character_range");
+  assert.deepEqual(
+    nodes
+      .filter(({ parent }) => parent === rangeIndex)
+      .map(({ kind, field, start, end }) => [kind, field, start, end]),
+    [
+      ["quoted_escape", "lower", 6, 10],
+      ["range_operator", null, 10, 11],
+      ["range_character", "upper", 11, 12],
+    ],
+  );
+  const edits = [{ byte: 3, deleteBytes: 3, insert: "377" }];
+  assert.deepEqual(parse(source, edits), parse(String.raw`"[\377\251-z]"`));
+  edits.push({ byte: 3, deleteBytes: 3, insert: "303" });
+  assert.deepEqual(parse(source, edits), nodes);
+});
+
+test("gitattributes: Git compares octal and literal UTF-8 patterns as bytes", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "git-octal-reference-"));
+  const run = (args, input = Buffer.alloc(0)) =>
+    spawnSync("git", args, {
+      cwd: directory,
+      input,
+      env: {
+        ...process.env,
+        LC_ALL: "C",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_ATTR_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: join(directory, "absent-config"),
+      },
+    });
+  try {
+    const version = run(["--version"]);
+    assert.equal(version.status, 0, version.stderr.toString());
+    t.diagnostic(
+      `Supplementary behavior established with Git 2.56.0; checked with ${version.stdout.toString().trim()}`,
+    );
+    assert.equal(run(["init", "--quiet"]).status, 0);
+    const paths = [
+      Buffer.from("a"),
+      Buffer.from("z"),
+      Buffer.from("é"),
+      Buffer.from([0xc3]),
+      Buffer.from([0xa9]),
+      Buffer.from([0xff]),
+    ];
+    for (const { patterns, expected } of [
+      {
+        patterns: ["[é]", String.raw`"[\303\251]"`],
+        expected: [false, false, false, true, true, false],
+      },
+      {
+        patterns: ["[é-z]", String.raw`"[\303\251-z]"`],
+        expected: [false, false, false, true, true, false],
+      },
+      {
+        patterns: ["[a-é]", String.raw`"[a-\303\251]"`],
+        expected: [true, true, false, true, true, false],
+      },
+      {
+        patterns: ["é", String.raw`"\303\251"`],
+        expected: [false, false, true, false, false, false],
+      },
+      {
+        patterns: [String.raw`"[\377]"`],
+        expected: [false, false, false, false, false, true],
+      },
+    ]) {
+      for (const pattern of patterns) {
+        writeFileSync(
+          join(directory, ".gitattributes"),
+          `${pattern} audit_probe\n`,
+        );
+        const result = run(
+          ["check-attr", "-z", "--stdin", "audit_probe"],
+          Buffer.concat(paths.flatMap((path) => [path, Buffer.from([0])])),
+        );
+        assert.equal(result.status, 0, result.stderr.toString());
+        assert.deepEqual(
+          result.stdout,
+          Buffer.concat(
+            paths.flatMap((path, index) => [
+              path,
+              Buffer.from(
+                `\0audit_probe\0${expected[index] ? "set" : "unspecified"}\0`,
+              ),
+            ]),
+          ),
+          pattern,
+        );
+      }
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

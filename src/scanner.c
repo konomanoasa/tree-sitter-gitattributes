@@ -71,15 +71,13 @@ enum Token {
 
 #define NONE UINT32_MAX
 
-// A bracket item: text, an escape, or a class term such as `[:alpha:]`.
+enum { DECODE_ERROR = -1, CURSOR_END = -2, INVALID_UNIT = -3 };
+
 typedef struct {
   uint32_t kind, end, opening_end, closing_start;
 } Item;
 
-// Positions count source characters from the current line start. Quoted units
-// are characters or C escapes; ranges stay on the original source. Zero-width
-// start tokens save lookahead decisions before their source is consumed.
-// Every field is a uint32_t so the serialized state has no padding.
+// Positions are line-relative character offsets; uint32_t avoids padding.
 typedef struct {
   uint32_t position, leading, line_end, content_start, content_end, kind;
   uint32_t token_end, name_start, name_end;
@@ -92,10 +90,8 @@ typedef struct {
 typedef char scanner_fits_buffer
   [sizeof(Scanner) <= TREE_SITTER_SERIALIZATION_BUFFER_SIZE ? 1 : -1];
 
-// Negative c values: -1 decode failure, -2 cursor limit, -3 invalid or
-// incomplete escape.
 typedef struct {
-  Scanner *s;
+  const Scanner *s;
   TSLexer *lexer;
   uint32_t raw, limit, start, end, kind;
   int32_t c;
@@ -139,9 +135,18 @@ static bool consume(
   enum Token token,
   uint32_t end
 ) {
-  while (s->position < end)
-    advance(s, lexer);
+  if (token == INVALID_ENCODING) {
+    do {
+      advance(s, lexer);
+    } while (!lexer->eof(lexer) && lexer->lookahead == DECODE_ERROR);
+  } else {
+    while (s->position < end)
+      advance(s, lexer);
+  }
   lexer->mark_end(lexer);
+  // Include the next decoded character so edits invalidate this run.
+  if (token == INVALID_ENCODING && !lexer->eof(lexer))
+    lexer->advance(lexer, false);
   return emit(lexer, valid, token);
 }
 
@@ -152,11 +157,12 @@ static bool text_run(
   enum Token token,
   uint32_t end
 ) {
-  const bool invalid = lexer->lookahead == -1;
-  while (s->position < end && (lexer->lookahead == -1) == invalid)
+  if (lexer->lookahead == DECODE_ERROR)
+    return consume(s, lexer, valid, INVALID_ENCODING, end);
+  while (s->position < end && lexer->lookahead != DECODE_ERROR)
     advance(s, lexer);
   lexer->mark_end(lexer);
-  return emit(lexer, valid, invalid ? INVALID_ENCODING : token);
+  return emit(lexer, valid, token);
 }
 
 static void raw_step(Cursor *r) {
@@ -164,45 +170,43 @@ static void raw_step(Cursor *r) {
   r->raw++;
 }
 
-// Quoted units decode named C escapes or three octal digits starting with 0
-// to 3.
 static void step(Cursor *r) {
   r->start = r->end = r->raw;
   r->kind = 0;
-  r->c = -2;
+  r->c = CURSOR_END;
   if (r->raw >= r->limit)
     return;
   int32_t c = r->lexer->lookahead;
   raw_step(r);
   r->c = c;
-  if (c == -1) {
+  if (c == DECODE_ERROR) {
     r->kind = INVALID_ENCODING;
-    while (r->raw < r->limit && r->lexer->lookahead == -1)
+    while (r->raw < r->limit && r->lexer->lookahead == DECODE_ERROR)
       raw_step(r);
-  }
-  if (r->s->quoted && r->start < r->s->content_end && c == '\\') {
+  } else if (r->s->quoted && r->start < r->s->content_end && c == '\\') {
     r->kind = QUOTED_ESCAPE;
     c = r->lexer->lookahead;
     if (r->raw >= r->limit) {
-      r->c = -3;
+      r->c = INVALID_UNIT;
       r->kind = absent(r->lexer, ENDED_QUOTED_ESCAPE, INCOMPLETE_QUOTED_ESCAPE);
-    } else if (c == -1) {
-      r->c = -3;
+    } else if (c == DECODE_ERROR) {
+      r->c = INVALID_UNIT;
       r->kind = ESCAPE_PREFIX;
     } else if (c >= '0' && c <= '3') {
       int32_t value = 0;
       unsigned digits = 0;
       while (digits < 3 && r->raw < r->limit) {
-        int32_t digit = r->lexer->lookahead;
+        const int32_t digit = r->lexer->lookahead;
         if (digit < '0' || digit > '7')
           break;
         value = value * 8 + digit - '0';
         raw_step(r);
         digits++;
       }
-      r->c = value;
-      if (digits != 3) {
-        r->c = -3;
+      if (digits == 3)
+        r->c = value;
+      else {
+        r->c = INVALID_UNIT;
         r->kind = r->raw == r->limit
           ? absent(r->lexer, ENDED_QUOTED_ESCAPE, INCOMPLETE_QUOTED_ESCAPE)
           : ENDED_QUOTED_ESCAPE;
@@ -236,7 +240,7 @@ static void step(Cursor *r) {
         r->c = c;
         break;
       default:
-        r->c = -3;
+        r->c = INVALID_UNIT;
         r->kind = INVALID_QUOTED_ESCAPE;
         break;
       }
@@ -245,13 +249,12 @@ static void step(Cursor *r) {
   r->end = r->raw;
 }
 
-static Cursor cursor(Scanner *s, TSLexer *lexer, uint32_t limit) {
+static Cursor cursor(const Scanner *s, TSLexer *lexer, uint32_t limit) {
   Cursor r = {.s = s, .lexer = lexer, .raw = s->position, .limit = limit};
   step(&r);
   return r;
 }
 
-// An unclosed quote leaves the pattern content ending at the line end.
 static bool start_line(Scanner *s, TSLexer *lexer, const bool *valid) {
   if (lexer->eof(lexer))
     return false;
@@ -271,7 +274,7 @@ static bool start_line(Scanner *s, TSLexer *lexer, const bool *valid) {
   s->content_end = NONE;
   bool escaped = false;
   while (!lexer->eof(lexer) && lexer->lookahead != '\n') {
-    int32_t c = lexer->lookahead;
+    const int32_t c = lexer->lookahead;
     if (s->position >= s->content_start && s->content_end == NONE) {
       if (s->quoted) {
         if (c == '"' && !escaped)
@@ -286,7 +289,6 @@ static bool start_line(Scanner *s, TSLexer *lexer, const bool *valid) {
   s->line_end = s->position;
   if (last == '\r' && lexer->lookahead == '\n')
     s->line_end--;
-  // The CR of a CRLF ending is neither leading whitespace nor content.
   if (s->leading > s->line_end)
     s->leading = s->line_end;
   if (s->content_end == NONE || s->content_end > s->line_end)
@@ -297,13 +299,12 @@ static bool start_line(Scanner *s, TSLexer *lexer, const bool *valid) {
   return emit(lexer, valid, LINE_START);
 }
 
-// Compare the macro marker after decoding C escapes; the opening quote is
-// passed as uncommitted lookahead.
 static bool start_content(Scanner *s, TSLexer *lexer, const bool *valid) {
   while (s->position < s->leading)
     advance(s, lexer);
   lexer->mark_end(lexer);
   if (s->kind == RULE_START) {
+    // The opening quote is lookahead; QUOTE_OPEN consumes it later.
     if (s->quoted)
       lexer->advance(lexer, false);
     Cursor r = {
@@ -338,16 +339,12 @@ static void skip_escaped(Cursor *r, Cursor *last, uint32_t *candidate) {
 }
 
 // Escapes and range upper endpoints take precedence over class candidates.
-// A candidate starts at [: and ends at the first unescaped ], preceded by a
-// colon other than the opening one. An escaped ] cancels it; candidate units
-// remain ordinary items. `lower` records an available lower endpoint.
-// Success leaves the cursor after the class; failure at ] or the limit.
 static bool next_class(Cursor *r, bool lower, uint32_t *start, Item *class) {
   Item a = {CLASS_OPEN, 0, 0, 0};
   uint32_t candidate = NONE;
   Cursor last = *r;
-  while (r->c != -2) {
-    int32_t here = r->c;
+  while (r->c != CURSOR_END) {
+    const int32_t here = r->c;
     if (here == ']') {
       if (candidate == NONE || last.c != ':' || last.end == a.opening_end)
         return false;
@@ -362,14 +359,14 @@ static bool next_class(Cursor *r, bool lower, uint32_t *start, Item *class) {
     step(r);
     if (here == '\\') {
       lower = r->c >= 0;
-      if (r->c != -2)
+      if (r->c != CURSOR_END)
         skip_escaped(r, &last, &candidate);
       continue;
     }
-    if (here == '-' && lower && r->c != -2 && r->c != ']') {
-      int32_t upper = r->c;
+    if (here == '-' && lower && r->c != CURSOR_END && r->c != ']') {
+      const int32_t upper = r->c;
       skip_escaped(r, &last, &candidate);
-      if (upper == '\\' && r->c != -2)
+      if (upper == '\\' && r->c != CURSOR_END)
         skip_escaped(r, &last, &candidate);
       lower = false;
       continue;
@@ -383,7 +380,6 @@ static bool next_class(Cursor *r, bool lower, uint32_t *start, Item *class) {
   return false;
 }
 
-// The cursor must be after the opening bracket.
 static void find_set(Scanner *s, Cursor *r) {
   s->set_end = s->set_close_end = s->content_end;
   s->class_start = NONE;
@@ -409,13 +405,13 @@ static void find_set(Scanner *s, Cursor *r) {
 
 static Item item(Cursor *r) {
   Item a = {SET_TEXT, 0, 0, 0};
-  if (r->c == -2)
+  if (r->c == CURSOR_END)
     return a;
-  int32_t c = r->c;
-  uint32_t end = r->end;
+  const int32_t c = r->c;
+  const uint32_t end = r->end;
   if (c == '[' && r->start == r->s->class_start) {
     a = r->s->class;
-    while (r->c != -2 && r->start < a.end)
+    while (r->c != CURSOR_END && r->start < a.end)
       step(r);
     return a;
   }
@@ -423,7 +419,7 @@ static Item item(Cursor *r) {
     a.kind = r->kind;
   step(r);
   if (c == '\\') {
-    if (r->c == -2)
+    if (r->c == CURSOR_END)
       a.kind = absent(r->lexer, INVALID_ESCAPE, INCOMPLETE_ESCAPE);
     else if (r->c < 0)
       a.kind = ESCAPE_PREFIX;
@@ -443,20 +439,14 @@ static bool endpoint(Item a) {
     (a.kind == SET_TEXT || a.kind == ESCAPE || a.kind == QUOTED_ESCAPE);
 }
 
-static bool glob_special(int32_t c) {
-  return c == '\\' || c == '*' || c == '?' || c == '/';
-}
-
-// End literal runs before [ so the set can be decided.
-static bool special(const Cursor *r) {
+static bool literal_boundary(const Cursor *r) {
   if (r->c < 0 || r->kind == QUOTED_ESCAPE)
     return true;
-  return glob_special(r->c) || r->c == '[';
+  const int32_t c = r->c;
+  return c == '\\' || c == '*' || c == '?' || c == '/' || c == '[';
 }
 
-// A backslash followed by a unit that cannot be escaped is held by the owner
-// up to `prefix_end`, and the unit's own issue follows. A C escape prefix
-// before an undecodable byte extends the held prefix to that byte.
+// Keep the backslash in its owner; report the following unit's own issue.
 static void hold_prefix(Scanner *s, Cursor *r, uint32_t prefix_end) {
   s->next = ESCAPE_PREFIX;
   s->prefix_end = prefix_end;
@@ -469,12 +459,12 @@ static void hold_prefix(Scanner *s, Cursor *r, uint32_t prefix_end) {
   s->next_end = r->end;
 }
 
-// Advance through every lookahead unit so edits inside it invalidate the
-// decision. Nonliteral tokens are decided here and consumed by the next call.
+// Consume lookahead units fully so edits inside them invalidate the decision.
 static bool prepare_glob(Scanner *s, TSLexer *lexer, const bool *valid) {
   lexer->mark_end(lexer);
   Cursor r = cursor(s, lexer, s->content_end);
-  uint32_t start = s->position;
+  bool separator = r.c == '/';
+  const uint32_t start = s->position;
   s->next_end = r.end;
   if (r.c < 0) {
     if (r.kind == ESCAPE_PREFIX)
@@ -489,13 +479,14 @@ static bool prepare_glob(Scanner *s, TSLexer *lexer, const bool *valid) {
     s->next = PATH_SEPARATOR;
   else if (r.c == '\\') {
     step(&r);
-    if (r.c == -2)
+    if (r.c == CURSOR_END)
       s->next = absent(lexer, INVALID_ESCAPE, INCOMPLETE_ESCAPE);
     else if (r.c < 0)
       hold_prefix(s, &r, s->next_end);
     else {
       s->next = ESCAPE;
       s->next_end = r.end;
+      separator = r.c == '/';
     }
   } else if (r.c == '*') {
     unsigned count = 0;
@@ -504,9 +495,11 @@ static bool prepare_glob(Scanner *s, TSLexer *lexer, const bool *valid) {
       s->next_end = r.end;
       step(&r);
     }
-    bool pair = count == 2 && s->component_start;
-    bool slash = r.c == '/';
-    bool tail = r.c == -2 && s->after_separator;
+    const bool pair = count == 2 && s->component_start;
+    const bool tail = r.c == CURSOR_END && s->after_separator;
+    if (r.c == '\\')
+      step(&r);
+    const bool slash = r.c == '/';
     s->next = pair && (slash || tail) ? RECURSIVE_WILDCARD : WILDCARD;
   } else if (r.kind == QUOTED_ESCAPE && r.c != '[')
     s->next = QUOTED_ESCAPE;
@@ -518,7 +511,7 @@ static bool prepare_glob(Scanner *s, TSLexer *lexer, const bool *valid) {
     uint32_t end = r.end;
     lexer->mark_end(lexer);
     step(&r);
-    while (!special(&r)) {
+    while (!literal_boundary(&r)) {
       end = r.end;
       lexer->mark_end(lexer);
       step(&r);
@@ -527,13 +520,16 @@ static bool prepare_glob(Scanner *s, TSLexer *lexer, const bool *valid) {
     s->component_start = false;
     return emit(lexer, valid, LITERAL);
   }
+  s->component_start = separator || s->next == NEGATIVE_PATTERN;
+  if (separator)
+    s->after_separator = true;
   return emit(lexer, valid, GLOB_START);
 }
 
 static bool prepare_set(Scanner *s, TSLexer *lexer, const bool *valid) {
   lexer->mark_end(lexer);
   Cursor r = cursor(s, lexer, s->set_end);
-  uint32_t start = s->position;
+  const uint32_t start = s->position;
   if (valid[SET_NEGATION] && (r.c == '!' || r.c == '^')) {
     s->position = r.end;
     lexer->mark_end(lexer);
@@ -545,10 +541,10 @@ static bool prepare_set(Scanner *s, TSLexer *lexer, const bool *valid) {
   Item current = item(&r);
   for (;;) {
     if (endpoint(current) && r.c == '-' && r.end < s->set_end) {
-      uint32_t operator_end = r.end;
-      bool plain_operator = r.kind != QUOTED_ESCAPE;
+      const uint32_t operator_end = r.end;
+      const bool plain_operator = r.kind != QUOTED_ESCAPE;
       step(&r);
-      Item upper = item(&r);
+      const Item upper = item(&r);
       if (endpoint(upper)) {
         if (here == start) {
           s->next = RANGE_START;
@@ -560,8 +556,6 @@ static bool prepare_set(Scanner *s, TSLexer *lexer, const bool *valid) {
         break;
       }
       if (current.kind == SET_TEXT) {
-        // A literal hyphen joins the text run; an escaped one stays a
-        // separate `quoted_escape`.
         if (!plain_operator) {
           s->next_end = current.end;
           break;
@@ -584,7 +578,7 @@ static bool prepare_set(Scanner *s, TSLexer *lexer, const bool *valid) {
     }
     s->next_end = current.end;
     here = r.start;
-    if (r.c == -2)
+    if (r.c == CURSOR_END)
       break;
     current = item(&r);
   }
@@ -599,7 +593,6 @@ unit_token(Scanner *s, TSLexer *lexer, const bool *valid, enum Token token) {
   return emit(lexer, valid, token);
 }
 
-// Closing a class term must find the next class in the set.
 static bool class_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
   if (s->position < s->class.opening_end)
     return consume(s, lexer, valid, CLASS_OPEN, s->class.opening_end);
@@ -614,8 +607,10 @@ static bool class_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
       s->class_start = NONE;
     return emit(lexer, valid, COMPOUND_CLOSE);
   }
+  if (lexer->lookahead == DECODE_ERROR)
+    return consume(s, lexer, valid, INVALID_ENCODING, s->class.closing_start);
   Cursor r = cursor(s, lexer, s->class.closing_start);
-  enum Token token = r.kind ? (enum Token)r.kind : CLASS_NAME;
+  const enum Token token = r.kind ? (enum Token)r.kind : CLASS_NAME;
   uint32_t end = r.end;
   lexer->mark_end(lexer);
   if (token == CLASS_NAME) {
@@ -631,13 +626,12 @@ static bool class_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
 }
 
 static bool name_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
+  if (lexer->lookahead == DECODE_ERROR)
+    return consume(s, lexer, valid, INVALID_ENCODING, s->name_end);
   Cursor r = cursor(s, lexer, s->name_end);
   enum Token token;
-  if (r.kind == ESCAPE_PREFIX) {
-    // This token is the held backslash; the undecodable byte follows.
+  if (r.kind == ESCAPE_PREFIX)
     s->next = INVALID_ENCODING;
-    s->next_end = r.end + 1;
-  }
   if (r.c < 0)
     token = (enum Token)r.kind;
   else if (!name_character(r.c, s->position == s->name_start))
@@ -664,10 +658,10 @@ static bool name_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
 static bool prepare_attribute(Scanner *s, TSLexer *lexer, const bool *valid) {
   lexer->mark_end(lexer);
   Cursor r = cursor(s, lexer, s->line_end);
-  bool modified = r.c == '-' || r.c == '!';
+  const bool modified = r.c == '-' || r.c == '!';
   s->name_start = s->position + (modified ? 1 : 0);
   s->name_end = NONE;
-  while (r.c != -2 && !whitespace(r.c)) {
+  while (r.c != CURSOR_END && !whitespace(r.c)) {
     if (r.c == '=' && s->name_end == NONE)
       s->name_end = r.start;
     step(&r);
@@ -709,7 +703,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
     return prepare_attribute(s, lexer, valid);
   if (valid[ATTRIBUTE_END] && s->position == s->token_end)
     return emit(lexer, valid, ATTRIBUTE_END);
-  bool at_name = s->position == s->name_start && s->position < s->name_end;
+  const bool at_name =
+    s->position == s->name_start && s->position < s->name_end;
   if (valid[NAME_START] && at_name)
     return emit(lexer, valid, NAME_START);
   if (valid[NAME_END] && s->position == s->name_end)
@@ -780,7 +775,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
   if (s->upper.end > s->position) {
     if (s->position == s->lower.end)
       return consume(s, lexer, valid, RANGE_OPERATOR, s->range_operator_end);
-    Item a = s->position < s->lower.end ? s->lower : s->upper;
+    const Item a = s->position < s->lower.end ? s->lower : s->upper;
     return consume(
       s,
       lexer,
@@ -789,25 +784,24 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
       a.end
     );
   }
-  enum Token token = (enum Token)s->next;
+  const enum Token token = (enum Token)s->next;
   if (token == CLASS_OPEN)
     return unit_token(s, lexer, valid, COMPOUND_OPEN);
   if (token == ESCAPE_PREFIX) {
     s->next = s->prefix_kind;
     return consume(s, lexer, valid, token, s->prefix_end);
   }
-  s->component_start = token == PATH_SEPARATOR || token == NEGATIVE_PATTERN;
-  if (token == PATH_SEPARATOR)
-    s->after_separator = true;
   return consume(s, lexer, valid, token, s->next_end);
 }
 
 void *tree_sitter_gitattributes_external_scanner_create(void) {
   return ts_calloc(1, sizeof(Scanner));
 }
+
 void tree_sitter_gitattributes_external_scanner_destroy(void *payload) {
   ts_free(payload);
 }
+
 unsigned tree_sitter_gitattributes_external_scanner_serialize(
   void *payload,
   char *buffer
@@ -815,6 +809,7 @@ unsigned tree_sitter_gitattributes_external_scanner_serialize(
   memcpy(buffer, payload, sizeof(Scanner));
   return sizeof(Scanner);
 }
+
 void tree_sitter_gitattributes_external_scanner_deserialize(
   void *payload,
   const char *buffer,
@@ -824,6 +819,7 @@ void tree_sitter_gitattributes_external_scanner_deserialize(
   if (length == sizeof(Scanner))
     memcpy(payload, buffer, length);
 }
+
 bool tree_sitter_gitattributes_external_scanner_scan(
   void *payload,
   TSLexer *lexer,
