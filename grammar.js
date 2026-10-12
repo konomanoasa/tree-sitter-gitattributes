@@ -1,19 +1,25 @@
+const missingKinds = (name) => [
+  [`missing_${name}`, "invalid_syntax", `missing_${name}`],
+  [`incomplete_${name}`, "incomplete_syntax", `missing_${name}`],
+];
 const issueKinds = [
-  ["missing_set_close", "invalid_syntax", "missing_set_close"],
-  ["incomplete_set_close", "incomplete_syntax", "missing_set_close"],
+  ...missingKinds("set_close"),
   ["invalid_encoding", "invalid_syntax", "invalid_encoding"],
   ["negative_pattern", "invalid_syntax", "negative_pattern"],
-  ["invalid_escape", "invalid_syntax", "incomplete_escape"],
+  ["ended_escape", "invalid_syntax", "incomplete_escape"],
   ["incomplete_escape", "incomplete_syntax", "incomplete_escape"],
   ["invalid_quoted_escape", "invalid_syntax", "invalid_quoted_escape"],
   ["ended_quoted_escape", "invalid_syntax", "incomplete_quoted_escape"],
   ["incomplete_quoted_escape", "incomplete_syntax", "incomplete_quoted_escape"],
-  ["missing_quote", "invalid_syntax", "missing_quote_close"],
-  ["incomplete_quote", "incomplete_syntax", "missing_quote_close"],
-  ["missing_separator", "invalid_syntax", "missing_attribute_separator"],
-  ["missing_name", "invalid_syntax", "missing_attribute_name"],
-  ["incomplete_name", "incomplete_syntax", "missing_attribute_name"],
+  ...missingKinds("quote_close"),
+  [
+    "missing_attribute_separator",
+    "invalid_syntax",
+    "missing_attribute_separator",
+  ],
+  ...missingKinds("attribute_name"),
   ["invalid_name_character", "invalid_syntax", "invalid_name_character"],
+  ["incomplete_name_character", "incomplete_syntax", "invalid_name_character"],
   [
     "invalid_name_escape",
     "invalid_syntax",
@@ -42,17 +48,24 @@ const issueRules = Object.fromEntries(
 const issue = ($, name) =>
   field("issue", alias($[`_${name}_issue`], $.syntax_issue));
 const issues = ($, ...names) => names.map((name) => issue($, name));
+const missing = ($, name) =>
+  choice(issue($, `missing_${name}`), issue($, `incomplete_${name}`));
 const heldPrefix = ($, ...names) =>
   seq($._escape_prefix, choice(...issues($, ...names)));
-const missingName = ($) =>
-  choice(...issues($, "missing_name", "incomplete_name"));
 const quoteClose = ($) =>
-  optional(
-    choice(
-      field("closing", $.quote_close),
-      ...issues($, "missing_quote", "incomplete_quote"),
-    ),
-  );
+  optional(choice(field("closing", $.quote_close), missing($, "quote_close")));
+const attributeName = ($) =>
+  choice(field("name", $.attribute_name), missing($, "attribute_name"));
+const globIssues = ($) => [
+  ...issues(
+    $,
+    "invalid_encoding",
+    "ended_escape",
+    "incomplete_escape",
+    ...quotedEscapeIssues,
+  ),
+  heldPrefix($, "invalid_encoding", ...quotedEscapeIssues),
+];
 
 export default grammar({
   name: "gitattributes",
@@ -138,14 +151,17 @@ export default grammar({
         $._macro_start,
         optional(field("opening", $.quote_open)),
         field("marker", $.macro_marker),
-        choice(field("name", $.attribute_name), missingName($)),
+        attributeName($),
         quoteClose($),
         optional($._attributes),
         $._end,
       ),
     _attributes: ($) =>
       repeat1(
-        seq(choice($._separator, issue($, "missing_separator")), $.attribute),
+        seq(
+          choice($._separator, issue($, "missing_attribute_separator")),
+          $.attribute,
+        ),
       ),
     attribute: ($) =>
       seq(
@@ -153,7 +169,7 @@ export default grammar({
         optional(
           field("modifier", choice($.unset_marker, $.unspecified_marker)),
         ),
-        choice(field("name", $.attribute_name), missingName($)),
+        attributeName($),
         optional(
           seq(
             field("operator", $.assignment_operator),
@@ -173,6 +189,7 @@ export default grammar({
               $,
               "invalid_encoding",
               "invalid_name_character",
+              "incomplete_name_character",
               "invalid_name_escape",
               ...quotedEscapeIssues,
             ),
@@ -203,15 +220,8 @@ export default grammar({
                 $.escape,
                 $.quoted_escape,
                 $.character_set,
-                ...issues(
-                  $,
-                  "invalid_encoding",
-                  "negative_pattern",
-                  "invalid_escape",
-                  "incomplete_escape",
-                  ...quotedEscapeIssues,
-                ),
-                heldPrefix($, "invalid_encoding", ...quotedEscapeIssues),
+                issue($, "negative_pattern"),
+                ...globIssues($),
               ),
             ),
           ),
@@ -233,21 +243,11 @@ export default grammar({
               $.quoted_escape,
               $.character_range,
               $.character_class,
-              ...issues(
-                $,
-                "invalid_encoding",
-                "invalid_escape",
-                "incomplete_escape",
-                ...quotedEscapeIssues,
-              ),
-              heldPrefix($, "invalid_encoding", ...quotedEscapeIssues),
+              ...globIssues($),
             ),
           ),
         ),
-        choice(
-          field("closing", $.set_close),
-          ...issues($, "missing_set_close", "incomplete_set_close"),
-        ),
+        choice(field("closing", $.set_close), missing($, "set_close")),
       ),
     character_range: ($) =>
       seq(

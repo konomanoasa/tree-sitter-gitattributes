@@ -1,0 +1,1087 @@
+==================
+Dot and equal bracket text close at the first bracket
+==================
+[[.a.]-[.z.][=e=]]
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (character_set
+        opening: (set_open)
+        (set_text)
+        closing: (set_close))
+      (glob_literal)
+      (character_set
+        opening: (set_open)
+        (set_text)
+        closing: (set_close))
+      (character_set
+        opening: (set_open)
+        (set_text)
+        closing: (set_close))
+      (glob_literal))))
+
+==================
+Unclosed set retains literal braces and set text
+==================
+{a,b}[abc*
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (glob_literal)
+      (character_set
+        opening: (set_open)
+        (set_text)
+        issue: (syntax_issue
+          (incomplete_syntax
+            (missing_set_close)))))))
+
+==================
+Octal delimiters and quoted class name fragments retain fields
+==================
+"\133\133\072di\147it\072\135\135" text
+---
+
+(document (attribute_rule pattern: (pattern opening: (quote_open)
+  (character_set opening: (set_open)
+    (character_class name: (class_name) name: (quoted_escape) name: (class_name))
+    closing: (set_close))
+  closing: (quote_close))
+  (attribute name: (attribute_name (name_text)))))
+
+==================
+Escaped hyphen stays a quoted escape beside set text
+==================
+"[a\055b\055[:alpha:]]"
+---
+
+(document (attribute_rule pattern: (pattern opening: (quote_open)
+  (character_set opening: (set_open)
+    (character_range lower: (range_character) (range_operator) upper: (range_character))
+    (quoted_escape)
+    (character_class name: (class_name))
+    closing: (set_close))
+  closing: (quote_close))))
+
+==================
+Classes inside an incomplete outer set preserve their owners
+==================
+[[:x:][[:y:][
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (character_set
+        opening: (set_open)
+        (character_class
+          name: (class_name))
+        (set_text)
+        (character_class
+          name: (class_name))
+        (set_text)
+        issue: (syntax_issue
+          (incomplete_syntax
+            (missing_set_close)))))))
+
+==================
+Range upper bracket prevents a character class
+==================
+[a-[:digit:]] text
+---
+
+(document
+  (attribute_rule
+    pattern: (pattern
+      (character_set
+        opening: (set_open)
+        (character_range
+          lower: (range_character)
+          (range_operator)
+          upper: (range_character))
+        (set_text)
+        closing: (set_close))
+      (glob_literal))
+    (attribute name: (attribute_name (name_text)))))
+
+==================
+Empty class retains its four delimiters without a name
+:cst
+==================
+[[::]]
+---
+
+0:0 - 0:6   document
+0:0 - 0:6     attribute_rule
+0:0 - 0:6       pattern: pattern
+0:0 - 0:6         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:5           character_class
+0:1 - 0:2             "["
+0:2 - 0:3             ":"
+0:3 - 0:4             ":"
+0:4 - 0:5             "]"
+0:5 - 0:6           closing: set_close `]`
+
+==================
+Encoded empty class retains delimiter source ranges
+:cst
+==================
+"[\133\072\072\135]"
+---
+
+0:0  - 0:20   document
+0:0  - 0:20     attribute_rule
+0:0  - 0:20       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:19         character_set
+0:1  - 0:2            opening: set_open `[`
+0:2  - 0:18           character_class
+0:2  - 0:6              "["
+0:6  - 0:10             ":"
+0:10 - 0:14             ":"
+0:14 - 0:18             "]"
+0:18 - 0:19           closing: set_close `]`
+0:19 - 0:20         closing: quote_close `\"`
+
+==================
+Quoted range upper bracket takes precedence over an encoded class prefix
+:cst
+==================
+"[A-\133:digit:]]"
+---
+
+0:0  - 0:18   document
+0:0  - 0:18     attribute_rule
+0:0  - 0:18       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:16         character_set
+0:1  - 0:2            opening: set_open `[`
+0:2  - 0:8            character_range
+0:2  - 0:3              lower: range_character `A`
+0:3  - 0:4              range_operator `-`
+0:4  - 0:8              upper: quoted_escape `\\133`
+0:8  - 0:15           set_text `:digit:`
+0:15 - 0:16           closing: set_close `]`
+0:16 - 0:17         glob_literal `]`
+0:17 - 0:18         closing: quote_close `\"`
+
+==================
+Class after a failed candidate whose escaped bracket ends a range
+:cst
+==================
+[[:a-\]-[:digit:]]
+---
+
+0:0  - 0:18   document
+0:0  - 0:18     attribute_rule
+0:0  - 0:18       pattern: pattern
+0:0  - 0:18         character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:3            set_text `[:`
+0:3  - 0:7            character_range
+0:3  - 0:4              lower: range_character `a`
+0:4  - 0:5              range_operator `-`
+0:5  - 0:7              upper: escape `\\]`
+0:7  - 0:8            set_text `-`
+0:8  - 0:17           character_class
+0:8  - 0:9              "["
+0:9  - 0:10             ":"
+0:10 - 0:15             name: class_name `digit`
+0:15 - 0:16             ":"
+0:16 - 0:17             "]"
+0:17 - 0:18           closing: set_close `]`
+
+==================
+Class search after a class respects the next range
+:cst
+==================
+[[:alpha:]A-[:digit:]]
+---
+
+0:0  - 0:22   document
+0:0  - 0:22     attribute_rule
+0:0  - 0:22       pattern: pattern
+0:0  - 0:21         character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:10           character_class
+0:1  - 0:2              "["
+0:2  - 0:3              ":"
+0:3  - 0:8              name: class_name `alpha`
+0:8  - 0:9              ":"
+0:9  - 0:10             "]"
+0:10 - 0:13           character_range
+0:10 - 0:11             lower: range_character `A`
+0:11 - 0:12             range_operator `-`
+0:12 - 0:13             upper: range_character `[`
+0:13 - 0:20           set_text `:digit:`
+0:20 - 0:21           closing: set_close `]`
+0:21 - 0:22         glob_literal `]`
+
+==================
+Leading close can be the lower endpoint before a class prefix
+:cst
+==================
+[]-[:digit:]]
+---
+
+0:0  - 0:13   document
+0:0  - 0:13     attribute_rule
+0:0  - 0:13       pattern: pattern
+0:0  - 0:12         character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:4            character_range
+0:1  - 0:2              lower: range_character `]`
+0:2  - 0:3              range_operator `-`
+0:3  - 0:4              upper: range_character `[`
+0:4  - 0:11           set_text `:digit:`
+0:11 - 0:12           closing: set_close `]`
+0:12 - 0:13         glob_literal `]`
+
+==================
+Character range and POSIX class
+:cst
+==================
+[!a-z[:digit:]] text
+---
+
+0:0  - 0:20   document
+0:0  - 0:20     attribute_rule
+0:0  - 0:15       pattern: pattern
+0:0  - 0:15         character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:2            negation: set_negation `!`
+0:2  - 0:5            character_range
+0:2  - 0:3              lower: range_character `a`
+0:3  - 0:4              range_operator `-`
+0:4  - 0:5              upper: range_character `z`
+0:5  - 0:14           character_class
+0:5  - 0:6              "["
+0:6  - 0:7              ":"
+0:7  - 0:12             name: class_name `digit`
+0:12 - 0:13             ":"
+0:13 - 0:14             "]"
+0:14 - 0:15           closing: set_close `]`
+0:16 - 0:20       attribute
+0:16 - 0:20         name: attribute_name
+0:16 - 0:20           name_text `text`
+
+==================
+Malformed class remains in the outer set
+:cst
+==================
+[[:]]
+---
+
+0:0 - 0:5   document
+0:0 - 0:5     attribute_rule
+0:0 - 0:5       pattern: pattern
+0:0 - 0:4         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:3           set_text `[:`
+0:3 - 0:4           closing: set_close `]`
+0:4 - 0:5         glob_literal `]`
+
+==================
+Missing class colon preserves the outer set boundary
+:cst
+==================
+[[:digit]]
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     attribute_rule
+0:0  - 0:10       pattern: pattern
+0:0  - 0:9          character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:8            set_text `[:digit`
+0:8  - 0:9            closing: set_close `]`
+0:9  - 0:10         glob_literal `]`
+
+==================
+Bracket as a range endpoint is not a collating symbol
+:cst
+==================
+[[-z]
+---
+
+0:0 - 0:5   document
+0:0 - 0:5     attribute_rule
+0:0 - 0:5       pattern: pattern
+0:0 - 0:5         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:4           character_range
+0:1 - 0:2             lower: range_character `[`
+0:2 - 0:3             range_operator `-`
+0:3 - 0:4             upper: range_character `z`
+0:4 - 0:5           closing: set_close `]`
+
+==================
+Dot bracket text closes the set before a following hyphen
+:cst
+==================
+[[.a.]-z]
+---
+
+0:0 - 0:9   document
+0:0 - 0:9     attribute_rule
+0:0 - 0:9       pattern: pattern
+0:0 - 0:6         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:5           set_text `[.a.`
+0:5 - 0:6           closing: set_close `]`
+0:6 - 0:9         glob_literal `-z]`
+
+==================
+Opening bracket can end a range before dot text
+:cst
+==================
+[a-[.z.]]
+---
+
+0:0 - 0:9   document
+0:0 - 0:9     attribute_rule
+0:0 - 0:9       pattern: pattern
+0:0 - 0:8         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:4           character_range
+0:1 - 0:2             lower: range_character `a`
+0:2 - 0:3             range_operator `-`
+0:3 - 0:4             upper: range_character `[`
+0:4 - 0:7           set_text `.z.`
+0:7 - 0:8           closing: set_close `]`
+0:8 - 0:9         glob_literal `]`
+
+==================
+Range endpoint is not reused
+:cst
+==================
+[a-m-o]
+---
+
+0:0 - 0:7   document
+0:0 - 0:7     attribute_rule
+0:0 - 0:7       pattern: pattern
+0:0 - 0:7         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:4           character_range
+0:1 - 0:2             lower: range_character `a`
+0:2 - 0:3             range_operator `-`
+0:3 - 0:4             upper: range_character `m`
+0:4 - 0:6           set_text `-o`
+0:6 - 0:7           closing: set_close `]`
+
+==================
+Simple set
+:cst
+==================
+[abc]
+---
+
+0:0 - 0:5   document
+0:0 - 0:5     attribute_rule
+0:0 - 0:5       pattern: pattern
+0:0 - 0:5         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:4           set_text `abc`
+0:4 - 0:5           closing: set_close `]`
+
+==================
+Leading closing bracket is a member
+:cst
+==================
+[]!]
+---
+
+0:0 - 0:4   document
+0:0 - 0:4     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:4         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:3           set_text `]!`
+0:3 - 0:4           closing: set_close `]`
+
+==================
+Caret negates a character set
+:cst
+==================
+[^a]
+---
+
+0:0 - 0:4   document
+0:0 - 0:4     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:4         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:2           negation: set_negation `^`
+0:2 - 0:3           set_text `a`
+0:3 - 0:4           closing: set_close `]`
+
+==================
+Edge hyphens are literal
+:cst
+==================
+[-ab-]
+---
+
+0:0 - 0:6   document
+0:0 - 0:6     attribute_rule
+0:0 - 0:6       pattern: pattern
+0:0 - 0:6         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:5           set_text `-ab-`
+0:5 - 0:6           closing: set_close `]`
+
+==================
+Escaped range endpoint
+:cst
+==================
+[\a-z]
+---
+
+0:0 - 0:6   document
+0:0 - 0:6     attribute_rule
+0:0 - 0:6       pattern: pattern
+0:0 - 0:6         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:5           character_range
+0:1 - 0:3             lower: escape `\\a`
+0:3 - 0:4             range_operator `-`
+0:4 - 0:5             upper: range_character `z`
+0:5 - 0:6           closing: set_close `]`
+
+==================
+Escaped set close
+:cst
+==================
+[a\]b]
+---
+
+0:0 - 0:6   document
+0:0 - 0:6     attribute_rule
+0:0 - 0:6       pattern: pattern
+0:0 - 0:6         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:2           set_text `a`
+0:2 - 0:4           escape `\\]`
+0:4 - 0:5           set_text `b`
+0:5 - 0:6           closing: set_close `]`
+
+==================
+Range upper bracket takes precedence over a class prefix
+:cst
+==================
+[a-[:digit:]]
+---
+
+0:0  - 0:13   document
+0:0  - 0:13     attribute_rule
+0:0  - 0:13       pattern: pattern
+0:0  - 0:12         character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:4            character_range
+0:1  - 0:2              lower: range_character `a`
+0:2  - 0:3              range_operator `-`
+0:3  - 0:4              upper: range_character `[`
+0:4  - 0:11           set_text `:digit:`
+0:11 - 0:12           closing: set_close `]`
+0:12 - 0:13         glob_literal `]`
+
+==================
+Class after a completed range remains independent
+:cst
+==================
+[a-b-[:digit:]]
+---
+
+0:0  - 0:15   document
+0:0  - 0:15     attribute_rule
+0:0  - 0:15       pattern: pattern
+0:0  - 0:15         character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:4            character_range
+0:1  - 0:2              lower: range_character `a`
+0:2  - 0:3              range_operator `-`
+0:3  - 0:4              upper: range_character `b`
+0:4  - 0:5            set_text `-`
+0:5  - 0:14           character_class
+0:5  - 0:6              "["
+0:6  - 0:7              ":"
+0:7  - 0:12             name: class_name `digit`
+0:12 - 0:13             ":"
+0:13 - 0:14             "]"
+0:14 - 0:15           closing: set_close `]`
+
+==================
+Dot bracket notation is ordinary set text
+:cst
+==================
+[[.ch.]]
+---
+
+0:0 - 0:8   document
+0:0 - 0:8     attribute_rule
+0:0 - 0:8       pattern: pattern
+0:0 - 0:7         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:6           set_text `[.ch.`
+0:6 - 0:7           closing: set_close `]`
+0:7 - 0:8         glob_literal `]`
+
+==================
+Equal bracket notation is ordinary set text
+:cst
+==================
+[[=a=]]
+---
+
+0:0 - 0:7   document
+0:0 - 0:7     attribute_rule
+0:0 - 0:7       pattern: pattern
+0:0 - 0:6         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:5           set_text `[=a=`
+0:5 - 0:6           closing: set_close `]`
+0:6 - 0:7         glob_literal `]`
+
+==================
+Class closes at its first colon bracket pair
+:cst
+==================
+[[:a[::][.b:]c.][:d:]
+---
+
+0:0  - 0:21   document
+0:0  - 0:21     attribute_rule
+0:0  - 0:21       pattern: pattern
+0:0  - 0:13         character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:8            character_class
+0:1  - 0:2              "["
+0:2  - 0:3              ":"
+0:3  - 0:6              name: class_name `a[:`
+0:6  - 0:7              ":"
+0:7  - 0:8              "]"
+0:8  - 0:12           set_text `[.b:`
+0:12 - 0:13           closing: set_close `]`
+0:13 - 0:16         glob_literal `c.]`
+0:16 - 0:21         character_set
+0:16 - 0:17           opening: set_open `[`
+0:17 - 0:20           set_text `:d:`
+0:20 - 0:21           closing: set_close `]`
+
+==================
+Octal spelling of set delimiters and range
+:cst
+==================
+"\133\041a\055z\135" text
+---
+
+0:0  - 0:25   document
+0:0  - 0:25     attribute_rule
+0:0  - 0:20       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:19         character_set
+0:1  - 0:5            opening: set_open `\\133`
+0:5  - 0:9            negation: set_negation `\\041`
+0:9  - 0:15           character_range
+0:9  - 0:10             lower: range_character `a`
+0:10 - 0:14             range_operator `\\055`
+0:14 - 0:15             upper: range_character `z`
+0:15 - 0:19           closing: set_close `\\135`
+0:19 - 0:20         closing: quote_close `\"`
+0:21 - 0:25       attribute
+0:21 - 0:25         name: attribute_name
+0:21 - 0:25           name_text `text`
+
+==================
+Quoted range endpoint
+:cst
+==================
+"[\141-z]"
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     attribute_rule
+0:0  - 0:10       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:9          character_set
+0:1  - 0:2            opening: set_open `[`
+0:2  - 0:8            character_range
+0:2  - 0:6              lower: quoted_escape `\\141`
+0:6  - 0:7              range_operator `-`
+0:7  - 0:8              upper: range_character `z`
+0:8  - 0:9            closing: set_close `]`
+0:9  - 0:10         closing: quote_close `\"`
+
+==================
+Quoted class name and delimiters
+:cst
+==================
+"\133\133\072di\147it\072\135\135"
+---
+
+0:0  - 0:34   document
+0:0  - 0:34     attribute_rule
+0:0  - 0:34       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:33         character_set
+0:1  - 0:5            opening: set_open `\\133`
+0:5  - 0:29           character_class
+0:5  - 0:9              "["
+0:9  - 0:13             ":"
+0:13 - 0:15             name: class_name `di`
+0:15 - 0:19             name: quoted_escape `\\147`
+0:19 - 0:21             name: class_name `it`
+0:21 - 0:25             ":"
+0:25 - 0:29             "]"
+0:29 - 0:33           closing: set_close `\\135`
+0:33 - 0:34         closing: quote_close `\"`
+
+==================
+Leading hyphen can be a literal range endpoint
+:cst
+==================
+[--a]
+---
+
+0:0 - 0:5   document
+0:0 - 0:5     attribute_rule
+0:0 - 0:5       pattern: pattern
+0:0 - 0:5         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:4           character_range
+0:1 - 0:2             lower: range_character `-`
+0:2 - 0:3             range_operator `-`
+0:3 - 0:4             upper: range_character `a`
+0:4 - 0:5           closing: set_close `]`
+
+==================
+Trailing hyphen can be a literal range endpoint
+:cst
+==================
+[%--]
+---
+
+0:0 - 0:5   document
+0:0 - 0:5     attribute_rule
+0:0 - 0:5       pattern: pattern
+0:0 - 0:5         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:4           character_range
+0:1 - 0:2             lower: range_character `%`
+0:2 - 0:3             range_operator `-`
+0:3 - 0:4             upper: range_character `-`
+0:4 - 0:5           closing: set_close `]`
+
+==================
+Encoded hyphen makes the following bracket a range endpoint
+:cst
+==================
+"[a\055[:alpha:]]"
+---
+
+0:0  - 0:18   document
+0:0  - 0:18     attribute_rule
+0:0  - 0:18       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:16         character_set
+0:1  - 0:2            opening: set_open `[`
+0:2  - 0:8            character_range
+0:2  - 0:3              lower: range_character `a`
+0:3  - 0:7              range_operator `\\055`
+0:7  - 0:8              upper: range_character `[`
+0:8  - 0:15           set_text `:alpha:`
+0:15 - 0:16           closing: set_close `]`
+0:16 - 0:17         glob_literal `]`
+0:17 - 0:18         closing: quote_close `\"`
+
+==================
+Empty class does not close its outer set
+:cst
+==================
+[[::]
+---
+
+0:0 - 0:5   document
+0:0 - 0:5     attribute_rule
+0:0 - 0:5       pattern: pattern
+0:0 - 0:5         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:5           character_class
+0:1 - 0:2             "["
+0:2 - 0:3             ":"
+0:3 - 0:4             ":"
+0:4 - 0:5             "]"
+0:5 - 0:5           issue: syntax_issue
+0:5 - 0:5             incomplete_syntax
+0:5 - 0:5               missing_set_close
+
+==================
+Unquoted separator ends an unclosed set before EOF
+:cst
+==================
+[abc  
+---
+
+0:0 - 0:6   document
+0:0 - 0:6     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:4         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:4           set_text `abc`
+0:4 - 0:4           issue: syntax_issue
+0:4 - 0:4             invalid_syntax
+0:4 - 0:4               missing_set_close
+
+==================
+Invalid quoted escape stays inside a class name
+:cst
+==================
+"[[:a\q:]]"
+---
+
+0:0  - 0:11   document
+0:0  - 0:11     attribute_rule
+0:0  - 0:11       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:10         character_set
+0:1  - 0:2            opening: set_open `[`
+0:2  - 0:9            character_class
+0:2  - 0:3              "["
+0:3  - 0:4              ":"
+0:4  - 0:5              name: class_name `a`
+0:5  - 0:7              issue: syntax_issue
+0:5  - 0:7                invalid_syntax
+0:5  - 0:7                  invalid_quoted_escape `\\q`
+0:7  - 0:8              ":"
+0:8  - 0:9              "]"
+0:9  - 0:10           closing: set_close `]`
+0:10 - 0:11         closing: quote_close `\"`
+
+==================
+Short octal escape stays inside a class name
+:cst
+==================
+"[[:a\12:]]"
+---
+
+0:0  - 0:12   document
+0:0  - 0:12     attribute_rule
+0:0  - 0:12       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:11         character_set
+0:1  - 0:2            opening: set_open `[`
+0:2  - 0:10           character_class
+0:2  - 0:3              "["
+0:3  - 0:4              ":"
+0:4  - 0:5              name: class_name `a`
+0:5  - 0:8              issue: syntax_issue
+0:5  - 0:8                invalid_syntax
+0:5  - 0:8                  incomplete_quoted_escape `\\12`
+0:8  - 0:9              ":"
+0:9  - 0:10             "]"
+0:10 - 0:11           closing: set_close `]`
+0:11 - 0:12         closing: quote_close `\"`
+
+==================
+Class closing bracket does not also close its set
+:cst
+==================
+a[:[:[:]
+
+---
+
+0:0 - 1:0   document
+0:0 - 1:0     attribute_rule
+0:0 - 0:8       pattern: pattern
+0:0 - 0:1         glob_literal `a`
+0:1 - 0:8         character_set
+0:1 - 0:2           opening: set_open `[`
+0:2 - 0:3           set_text `:`
+0:3 - 0:8           character_class
+0:3 - 0:4             "["
+0:4 - 0:5             ":"
+0:5 - 0:6             name: class_name `[`
+0:6 - 0:7             ":"
+0:7 - 0:8             "]"
+0:8 - 0:8           issue: syntax_issue
+0:8 - 0:8             invalid_syntax
+0:8 - 0:8               missing_set_close
+0:8 - 1:0       line_ending
+0:8 - 0:9         `\n`
+
+==================
+Unfinished set before attributes
+:cst
+==================
+[abc text
+---
+
+0:0 - 0:9   document
+0:0 - 0:9     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:4         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:4           set_text `abc`
+0:4 - 0:4           issue: syntax_issue
+0:4 - 0:4             invalid_syntax
+0:4 - 0:4               missing_set_close
+0:5 - 0:9       attribute
+0:5 - 0:9         name: attribute_name
+0:5 - 0:9           name_text `text`
+
+==================
+Unfinished macro marker is an incomplete set
+:cst
+==================
+[attr text
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     attribute_rule
+0:0  - 0:5        pattern: pattern
+0:0  - 0:5          character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:5            set_text `attr`
+0:5  - 0:5            issue: syntax_issue
+0:5  - 0:5              invalid_syntax
+0:5  - 0:5                missing_set_close
+0:6  - 0:10       attribute
+0:6  - 0:10         name: attribute_name
+0:6  - 0:10           name_text `text`
+
+==================
+Quoted octal opening bracket retains a missing close
+:cst
+==================
+"\133abc"
+---
+
+0:0 - 0:9   document
+0:0 - 0:9     attribute_rule
+0:0 - 0:9       pattern: pattern
+0:0 - 0:1         opening: quote_open `\"`
+0:1 - 0:8         character_set
+0:1 - 0:5           opening: set_open `\\133`
+0:5 - 0:8           set_text `abc`
+0:8 - 0:8           issue: syntax_issue
+0:8 - 0:8             invalid_syntax
+0:8 - 0:8               missing_set_close
+0:8 - 0:9         closing: quote_close `\"`
+
+==================
+Unclosed set at EOF
+:cst
+==================
+x[abc
+---
+
+0:0 - 0:5   document
+0:0 - 0:5     attribute_rule
+0:0 - 0:5       pattern: pattern
+0:0 - 0:1         glob_literal `x`
+0:1 - 0:5         character_set
+0:1 - 0:2           opening: set_open `[`
+0:2 - 0:5           set_text `abc`
+0:5 - 0:5           issue: syntax_issue
+0:5 - 0:5             incomplete_syntax
+0:5 - 0:5               missing_set_close
+
+==================
+Unclosed set at line end
+:cst
+==================
+[abc
+next
+---
+
+0:0 - 1:4   document
+0:0 - 1:0     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:4         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:4           set_text `abc`
+0:4 - 0:4           issue: syntax_issue
+0:4 - 0:4             invalid_syntax
+0:4 - 0:4               missing_set_close
+0:4 - 1:0       line_ending
+0:4 - 0:5         `\n`
+1:0 - 1:4     attribute_rule
+1:0 - 1:4       pattern: pattern
+1:0 - 1:4         glob_literal `next`
+
+==================
+Leading close remains a member of an incomplete set
+:cst
+==================
+[]
+---
+
+0:0 - 0:2   document
+0:0 - 0:2     attribute_rule
+0:0 - 0:2       pattern: pattern
+0:0 - 0:2         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:2           set_text `]`
+0:2 - 0:2           issue: syntax_issue
+0:2 - 0:2             incomplete_syntax
+0:2 - 0:2               missing_set_close
+
+==================
+Wildcards inside an incomplete set remain set text
+:cst
+==================
+x[a*?
+---
+
+0:0 - 0:5   document
+0:0 - 0:5     attribute_rule
+0:0 - 0:5       pattern: pattern
+0:0 - 0:1         glob_literal `x`
+0:1 - 0:5         character_set
+0:1 - 0:2           opening: set_open `[`
+0:2 - 0:5           set_text `a*?`
+0:5 - 0:5           issue: syntax_issue
+0:5 - 0:5             incomplete_syntax
+0:5 - 0:5               missing_set_close
+
+==================
+Set and trailing escape are independently incomplete
+:cst
+==================
+[a\
+---
+
+0:0 - 0:3   document
+0:0 - 0:3     attribute_rule
+0:0 - 0:3       pattern: pattern
+0:0 - 0:3         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:2           set_text `a`
+0:2 - 0:3           issue: syntax_issue
+0:2 - 0:3             incomplete_syntax
+0:2 - 0:3               incomplete_escape `\\`
+0:3 - 0:3           issue: syntax_issue
+0:3 - 0:3             incomplete_syntax
+0:3 - 0:3               missing_set_close
+
+==================
+Class delimiters
+:cst
+==================
+[[:digit:]]
+---
+
+0:0  - 0:11   document
+0:0  - 0:11     attribute_rule
+0:0  - 0:11       pattern: pattern
+0:0  - 0:11         character_set
+0:0  - 0:1            opening: set_open `[`
+0:1  - 0:10           character_class
+0:1  - 0:2              "["
+0:2  - 0:3              ":"
+0:3  - 0:8              name: class_name `digit`
+0:8  - 0:9              ":"
+0:9  - 0:10             "]"
+0:10 - 0:11           closing: set_close `]`
+
+==================
+Dot bracket text preserves Unicode byte ranges
+:cst
+==================
+[[.é.]]
+---
+
+0:0 - 0:8   document
+0:0 - 0:8     attribute_rule
+0:0 - 0:8       pattern: pattern
+0:0 - 0:7         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:6           set_text `[.é.`
+0:6 - 0:7           closing: set_close `]`
+0:7 - 0:8         glob_literal `]`
+
+==================
+Octal bracket text keeps source ranges
+:cst
+==================
+"[\133\056a\056\135]"
+---
+
+0:0  - 0:21   document
+0:0  - 0:21     attribute_rule
+0:0  - 0:21       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:19         character_set
+0:1  - 0:2            opening: set_open `[`
+0:2  - 0:6            quoted_escape `\\133`
+0:6  - 0:10           quoted_escape `\\056`
+0:10 - 0:11           set_text `a`
+0:11 - 0:15           quoted_escape `\\056`
+0:15 - 0:19           closing: set_close `\\135`
+0:19 - 0:20         glob_literal `]`
+0:20 - 0:21         closing: quote_close `\"`
+
+==================
+Mixed literal and octal set text
+:cst
+==================
+"[[\075a=\135]"
+---
+
+0:0  - 0:15   document
+0:0  - 0:15     attribute_rule
+0:0  - 0:15       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:13         character_set
+0:1  - 0:2            opening: set_open `[`
+0:2  - 0:3            set_text `[`
+0:3  - 0:7            quoted_escape `\\075`
+0:7  - 0:9            set_text `a=`
+0:9  - 0:13           closing: set_close `\\135`
+0:13 - 0:14         glob_literal `]`
+0:14 - 0:15         closing: quote_close `\"`
+
+==================
+Quoted bracket remains an escape inside an incomplete set
+:cst
+==================
+"[\133"
+---
+
+0:0 - 0:7   document
+0:0 - 0:7     attribute_rule
+0:0 - 0:7       pattern: pattern
+0:0 - 0:1         opening: quote_open `\"`
+0:1 - 0:6         character_set
+0:1 - 0:2           opening: set_open `[`
+0:2 - 0:6           quoted_escape `\\133`
+0:6 - 0:6           issue: syntax_issue
+0:6 - 0:6             invalid_syntax
+0:6 - 0:6               missing_set_close
+0:6 - 0:7         closing: quote_close `\"`
+
+==================
+Octal range endpoints retain individual source escapes
+:cst
+==================
+"[\303\251-z]"
+---
+
+0:0  - 0:14   document
+0:0  - 0:14     attribute_rule
+0:0  - 0:14       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:13         character_set
+0:1  - 0:2            opening: set_open `[`
+0:2  - 0:6            quoted_escape `\\303`
+0:6  - 0:12           character_range
+0:6  - 0:10             lower: quoted_escape `\\251`
+0:10 - 0:11             range_operator `-`
+0:11 - 0:12             upper: range_character `z`
+0:12 - 0:13           closing: set_close `]`
+0:13 - 0:14         closing: quote_close `\"`

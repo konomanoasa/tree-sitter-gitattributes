@@ -209,7 +209,7 @@
                     "type": "ALIAS",
                     "content": {
                       "type": "SYMBOL",
-                      "name": "_missing_name_issue"
+                      "name": "_missing_attribute_name_issue"
                     },
                     "named": true,
                     "value": "syntax_issue"
@@ -222,7 +222,7 @@
                     "type": "ALIAS",
                     "content": {
                       "type": "SYMBOL",
-                      "name": "_incomplete_name_issue"
+                      "name": "_incomplete_attribute_name_issue"
                     },
                     "named": true,
                     "value": "syntax_issue"
@@ -247,30 +247,35 @@
                   }
                 },
                 {
-                  "type": "FIELD",
-                  "name": "issue",
-                  "content": {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_missing_quote_issue"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "FIELD",
+                      "name": "issue",
+                      "content": {
+                        "type": "ALIAS",
+                        "content": {
+                          "type": "SYMBOL",
+                          "name": "_missing_quote_close_issue"
+                        },
+                        "named": true,
+                        "value": "syntax_issue"
+                      }
                     },
-                    "named": true,
-                    "value": "syntax_issue"
-                  }
-                },
-                {
-                  "type": "FIELD",
-                  "name": "issue",
-                  "content": {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_incomplete_quote_issue"
-                    },
-                    "named": true,
-                    "value": "syntax_issue"
-                  }
+                    {
+                      "type": "FIELD",
+                      "name": "issue",
+                      "content": {
+                        "type": "ALIAS",
+                        "content": {
+                          "type": "SYMBOL",
+                          "name": "_incomplete_quote_close_issue"
+                        },
+                        "named": true,
+                        "value": "syntax_issue"
+                      }
+                    }
+                  ]
                 }
               ]
             },
@@ -316,7 +321,7 @@
                   "type": "ALIAS",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "_missing_separator_issue"
+                    "name": "_missing_attribute_separator_issue"
                   },
                   "named": true,
                   "value": "syntax_issue"
@@ -384,7 +389,7 @@
                     "type": "ALIAS",
                     "content": {
                       "type": "SYMBOL",
-                      "name": "_missing_name_issue"
+                      "name": "_missing_attribute_name_issue"
                     },
                     "named": true,
                     "value": "syntax_issue"
@@ -397,7 +402,7 @@
                     "type": "ALIAS",
                     "content": {
                       "type": "SYMBOL",
-                      "name": "_incomplete_name_issue"
+                      "name": "_incomplete_attribute_name_issue"
                     },
                     "named": true,
                     "value": "syntax_issue"
@@ -491,6 +496,19 @@
                   "content": {
                     "type": "SYMBOL",
                     "name": "_invalid_name_character_issue"
+                  },
+                  "named": true,
+                  "value": "syntax_issue"
+                }
+              },
+              {
+                "type": "FIELD",
+                "name": "issue",
+                "content": {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_incomplete_name_character_issue"
                   },
                   "named": true,
                   "value": "syntax_issue"
@@ -695,19 +713,6 @@
                           "type": "ALIAS",
                           "content": {
                             "type": "SYMBOL",
-                            "name": "_invalid_encoding_issue"
-                          },
-                          "named": true,
-                          "value": "syntax_issue"
-                        }
-                      },
-                      {
-                        "type": "FIELD",
-                        "name": "issue",
-                        "content": {
-                          "type": "ALIAS",
-                          "content": {
-                            "type": "SYMBOL",
                             "name": "_negative_pattern_issue"
                           },
                           "named": true,
@@ -721,7 +726,20 @@
                           "type": "ALIAS",
                           "content": {
                             "type": "SYMBOL",
-                            "name": "_invalid_escape_issue"
+                            "name": "_invalid_encoding_issue"
+                          },
+                          "named": true,
+                          "value": "syntax_issue"
+                        }
+                      },
+                      {
+                        "type": "FIELD",
+                        "name": "issue",
+                        "content": {
+                          "type": "ALIAS",
+                          "content": {
+                            "type": "SYMBOL",
+                            "name": "_ended_escape_issue"
                           },
                           "named": true,
                           "value": "syntax_issue"
@@ -867,30 +885,35 @@
                   }
                 },
                 {
-                  "type": "FIELD",
-                  "name": "issue",
-                  "content": {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_missing_quote_issue"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "FIELD",
+                      "name": "issue",
+                      "content": {
+                        "type": "ALIAS",
+                        "content": {
+                          "type": "SYMBOL",
+                          "name": "_missing_quote_close_issue"
+                        },
+                        "named": true,
+                        "value": "syntax_issue"
+                      }
                     },
-                    "named": true,
-                    "value": "syntax_issue"
-                  }
-                },
-                {
-                  "type": "FIELD",
-                  "name": "issue",
-                  "content": {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_incomplete_quote_issue"
-                    },
-                    "named": true,
-                    "value": "syntax_issue"
-                  }
+                    {
+                      "type": "FIELD",
+                      "name": "issue",
+                      "content": {
+                        "type": "ALIAS",
+                        "content": {
+                          "type": "SYMBOL",
+                          "name": "_incomplete_quote_close_issue"
+                        },
+                        "named": true,
+                        "value": "syntax_issue"
+                      }
+                    }
+                  ]
                 }
               ]
             },
@@ -988,7 +1011,7 @@
                       "type": "ALIAS",
                       "content": {
                         "type": "SYMBOL",
-                        "name": "_invalid_escape_issue"
+                        "name": "_ended_escape_issue"
                       },
                       "named": true,
                       "value": "syntax_issue"
@@ -1129,30 +1152,35 @@
               }
             },
             {
-              "type": "FIELD",
-              "name": "issue",
-              "content": {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_missing_set_close_issue"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "FIELD",
+                  "name": "issue",
+                  "content": {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_missing_set_close_issue"
+                    },
+                    "named": true,
+                    "value": "syntax_issue"
+                  }
                 },
-                "named": true,
-                "value": "syntax_issue"
-              }
-            },
-            {
-              "type": "FIELD",
-              "name": "issue",
-              "content": {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_incomplete_set_close_issue"
-                },
-                "named": true,
-                "value": "syntax_issue"
-              }
+                {
+                  "type": "FIELD",
+                  "name": "issue",
+                  "content": {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_incomplete_set_close_issue"
+                    },
+                    "named": true,
+                    "value": "syntax_issue"
+                  }
+                }
+              ]
             }
           ]
         }
@@ -1408,20 +1436,20 @@
       "named": true,
       "value": "invalid_syntax"
     },
-    "_invalid_escape_outcome": {
+    "_ended_escape_outcome": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_invalid_escape"
+        "name": "_ended_escape"
       },
       "named": true,
       "value": "incomplete_escape"
     },
-    "_invalid_escape_issue": {
+    "_ended_escape_issue": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_invalid_escape_outcome"
+        "name": "_ended_escape_outcome"
       },
       "named": true,
       "value": "invalid_syntax"
@@ -1498,92 +1526,92 @@
       "named": true,
       "value": "incomplete_syntax"
     },
-    "_missing_quote_outcome": {
+    "_missing_quote_close_outcome": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_missing_quote"
+        "name": "_missing_quote_close"
       },
       "named": true,
       "value": "missing_quote_close"
     },
-    "_missing_quote_issue": {
+    "_missing_quote_close_issue": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_missing_quote_outcome"
+        "name": "_missing_quote_close_outcome"
       },
       "named": true,
       "value": "invalid_syntax"
     },
-    "_incomplete_quote_outcome": {
+    "_incomplete_quote_close_outcome": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_incomplete_quote"
+        "name": "_incomplete_quote_close"
       },
       "named": true,
       "value": "missing_quote_close"
     },
-    "_incomplete_quote_issue": {
+    "_incomplete_quote_close_issue": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_incomplete_quote_outcome"
+        "name": "_incomplete_quote_close_outcome"
       },
       "named": true,
       "value": "incomplete_syntax"
     },
-    "_missing_separator_outcome": {
+    "_missing_attribute_separator_outcome": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_missing_separator"
+        "name": "_missing_attribute_separator"
       },
       "named": true,
       "value": "missing_attribute_separator"
     },
-    "_missing_separator_issue": {
+    "_missing_attribute_separator_issue": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_missing_separator_outcome"
+        "name": "_missing_attribute_separator_outcome"
       },
       "named": true,
       "value": "invalid_syntax"
     },
-    "_missing_name_outcome": {
+    "_missing_attribute_name_outcome": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_missing_name"
+        "name": "_missing_attribute_name"
       },
       "named": true,
       "value": "missing_attribute_name"
     },
-    "_missing_name_issue": {
+    "_missing_attribute_name_issue": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_missing_name_outcome"
+        "name": "_missing_attribute_name_outcome"
       },
       "named": true,
       "value": "invalid_syntax"
     },
-    "_incomplete_name_outcome": {
+    "_incomplete_attribute_name_outcome": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_incomplete_name"
+        "name": "_incomplete_attribute_name"
       },
       "named": true,
       "value": "missing_attribute_name"
     },
-    "_incomplete_name_issue": {
+    "_incomplete_attribute_name_issue": {
       "type": "ALIAS",
       "content": {
         "type": "SYMBOL",
-        "name": "_incomplete_name_outcome"
+        "name": "_incomplete_attribute_name_outcome"
       },
       "named": true,
       "value": "incomplete_syntax"
@@ -1605,6 +1633,24 @@
       },
       "named": true,
       "value": "invalid_syntax"
+    },
+    "_incomplete_name_character_outcome": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_name_character"
+      },
+      "named": true,
+      "value": "invalid_name_character"
+    },
+    "_incomplete_name_character_issue": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_name_character_outcome"
+      },
+      "named": true,
+      "value": "incomplete_syntax"
     },
     "_invalid_name_escape_reason": {
       "type": "ALIAS",
@@ -1844,7 +1890,7 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_invalid_escape"
+      "name": "_ended_escape"
     },
     {
       "type": "SYMBOL",
@@ -1864,27 +1910,31 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_missing_quote"
+      "name": "_missing_quote_close"
     },
     {
       "type": "SYMBOL",
-      "name": "_incomplete_quote"
+      "name": "_incomplete_quote_close"
     },
     {
       "type": "SYMBOL",
-      "name": "_missing_separator"
+      "name": "_missing_attribute_separator"
     },
     {
       "type": "SYMBOL",
-      "name": "_missing_name"
+      "name": "_missing_attribute_name"
     },
     {
       "type": "SYMBOL",
-      "name": "_incomplete_name"
+      "name": "_incomplete_attribute_name"
     },
     {
       "type": "SYMBOL",
       "name": "_invalid_name_character"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_incomplete_name_character"
     },
     {
       "type": "SYMBOL",

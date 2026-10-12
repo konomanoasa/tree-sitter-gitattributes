@@ -16,6 +16,10 @@ import {
   root,
 } from "../scripts/tree-sitter.js";
 
+const commandTimeoutMs = 60_000;
+const firstThemeColor = 17;
+const newlineByte = 0x0a;
+
 function decodeEntities(text) {
   return text
     .replaceAll("&lt;", "<")
@@ -66,7 +70,7 @@ function createHighlighter({ directory, root, run, captureNames }) {
     JSON.stringify({
       "parser-directories": [parserDirectory],
       theme: Object.fromEntries(
-        captureNames.map((name, index) => [name, index + 17]),
+        captureNames.map((name, index) => [name, index + firstThemeColor]),
       ),
     }),
   );
@@ -125,7 +129,7 @@ function assertCaptures(source, actual, ranges) {
     previousEnd = end;
   }
   for (const [index, byte] of bytes.entries()) {
-    if (byte !== 10)
+    if (byte !== newlineByte)
       assert.equal(
         actual[index],
         expected[index],
@@ -171,7 +175,7 @@ after(() => {
 
 function assertCommand(arguments_) {
   const result = runner.run(arguments_, {
-    timeout: 60_000,
+    timeout: commandTimeoutMs,
   });
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -182,6 +186,16 @@ function assertCommand(arguments_) {
 const grammar = grammars[0];
 
 const finalCaptureCases = [
+  {
+    name: "VT and FF are highlighted as pattern and value content",
+    source: "\v#x\f name=x\vy\f",
+    captures: [
+      [0, 4, "string.special.path"],
+      [5, 9, "attribute"],
+      [9, 10, "operator"],
+      [10, 14, "string"],
+    ],
+  },
   {
     name: "escaped separators retain their own captures around a recursive wildcard",
     source: "x\\/**\\/b",

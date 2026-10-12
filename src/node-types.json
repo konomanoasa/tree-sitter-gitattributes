@@ -408,6 +408,10 @@
           "named": true
         },
         {
+          "type": "invalid_name_character",
+          "named": true
+        },
+        {
           "type": "missing_attribute_name",
           "named": true
         },

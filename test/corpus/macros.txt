@@ -1,0 +1,452 @@
+==================
+Macro definition and empty value
+==================
+[attr]binary -text diff=
+---
+
+(document
+  (macro_definition marker: (macro_marker) name: (attribute_name (name_text))
+    (attribute modifier: (unset_marker) name: (attribute_name (name_text)))
+    (attribute name: (attribute_name (name_text)) operator: (assignment_operator))))
+
+==================
+Missing macro name preserves subsequent attributes
+==================
+[attr] text
+---
+
+(document (macro_definition marker: (macro_marker)
+  issue: (syntax_issue (invalid_syntax (missing_attribute_name)))
+  (attribute name: (attribute_name (name_text)))))
+
+==================
+Quoted macro marker and name retain source spelling
+==================
+"[attr]plain" text
+"\133attr]\146oo" -diff
+---
+
+(document
+  (macro_definition
+    opening: (quote_open)
+    marker: (macro_marker)
+    name: (attribute_name
+      (name_text))
+    closing: (quote_close)
+    (attribute
+      name: (attribute_name
+        (name_text)))
+    (line_ending))
+  (macro_definition
+    opening: (quote_open)
+    marker: (macro_marker)
+    name: (attribute_name
+      (quoted_escape)
+      (name_text))
+    closing: (quote_close)
+    (attribute
+      modifier: (unset_marker)
+      name: (attribute_name
+        (name_text)))))
+
+==================
+Final CR in an unfinished quoted macro name is independently incomplete
+==================
+"[attr]a$
+---
+
+(document
+  (macro_definition
+    opening: (quote_open)
+    marker: (macro_marker)
+    name: (attribute_name
+      (name_text)
+      issue: (syntax_issue (invalid_syntax (invalid_name_character)))
+      issue: (syntax_issue (incomplete_syntax (invalid_name_character))))
+    issue: (syntax_issue (incomplete_syntax (missing_quote_close)))))
+
+==================
+Encoded macro marker and name
+:cst
+==================
+"\133attr]\146oo" text
+---
+
+0:0  - 0:22   document
+0:0  - 0:22     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:10       marker: macro_marker `\\133attr]`
+0:10 - 0:16       name: attribute_name
+0:10 - 0:14         quoted_escape `\\146`
+0:14 - 0:16         name_text `oo`
+0:16 - 0:17       closing: quote_close `\"`
+0:18 - 0:22       attribute
+0:18 - 0:22         name: attribute_name
+0:18 - 0:22           name_text `text`
+
+==================
+Macro definition
+:cst
+==================
+[attr]binary -diff -merge -text
+---
+
+0:0  - 0:31   document
+0:0  - 0:31     macro_definition
+0:0  - 0:6        marker: macro_marker `[attr]`
+0:6  - 0:12       name: attribute_name
+0:6  - 0:12         name_text `binary`
+0:13 - 0:18       attribute
+0:13 - 0:14         modifier: unset_marker `-`
+0:14 - 0:18         name: attribute_name
+0:14 - 0:18           name_text `diff`
+0:19 - 0:25       attribute
+0:19 - 0:20         modifier: unset_marker `-`
+0:20 - 0:25         name: attribute_name
+0:20 - 0:25           name_text `merge`
+0:26 - 0:31       attribute
+0:26 - 0:27         modifier: unset_marker `-`
+0:27 - 0:31         name: attribute_name
+0:27 - 0:31           name_text `text`
+
+==================
+Quoted macro definition
+:cst
+==================
+"[attr]name" text
+---
+
+0:0  - 0:17   document
+0:0  - 0:17     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:11       name: attribute_name
+0:7  - 0:11         name_text `name`
+0:11 - 0:12       closing: quote_close `\"`
+0:13 - 0:17       attribute
+0:13 - 0:17         name: attribute_name
+0:13 - 0:17           name_text `text`
+
+==================
+Macro may have no attributes
+:cst
+==================
+[attr]empty
+---
+
+0:0  - 0:11   document
+0:0  - 0:11     macro_definition
+0:0  - 0:6        marker: macro_marker `[attr]`
+0:6  - 0:11       name: attribute_name
+0:6  - 0:11         name_text `empty`
+
+==================
+EOF CR in an unfinished quoted macro name is incomplete
+:cst
+==================
+"[attr]a
+---
+
+0:0 - 0:9   document
+0:0 - 0:9     macro_definition
+0:0 - 0:1       opening: quote_open `\"`
+0:1 - 0:7       marker: macro_marker `[attr]`
+0:7 - 0:9       name: attribute_name
+0:7 - 0:8         name_text `a`
+0:8 - 0:9         issue: syntax_issue
+0:8 - 0:9           incomplete_syntax
+0:8 - 0:9             invalid_name_character `\r`
+0:9 - 0:9       issue: syntax_issue
+0:9 - 0:9         incomplete_syntax
+0:9 - 0:9           missing_quote_close
+
+==================
+EOF CR separates an incomplete name issue from a preceding invalid run
+:cst
+==================
+"[attr]a@$
+---
+
+0:0  - 0:11   document
+0:0  - 0:11     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:11       name: attribute_name
+0:7  - 0:8          name_text `a`
+0:8  - 0:10         issue: syntax_issue
+0:8  - 0:10           invalid_syntax
+0:8  - 0:10             invalid_name_character `@$`
+0:10 - 0:11         issue: syntax_issue
+0:10 - 0:11           incomplete_syntax
+0:10 - 0:11             invalid_name_character `\r`
+0:11 - 0:11       issue: syntax_issue
+0:11 - 0:11         incomplete_syntax
+0:11 - 0:11           missing_quote_close
+
+==================
+Only the final CR in a quoted macro name is incomplete
+:cst
+==================
+"[attr]a
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:10       name: attribute_name
+0:7  - 0:8          name_text `a`
+0:8  - 0:9          issue: syntax_issue
+0:8  - 0:9            invalid_syntax
+0:8  - 0:9              invalid_name_character `\r`
+0:9  - 0:10         issue: syntax_issue
+0:9  - 0:10           incomplete_syntax
+0:9  - 0:10             invalid_name_character `\r`
+0:10 - 0:10       issue: syntax_issue
+0:10 - 0:10         incomplete_syntax
+0:10 - 0:10           missing_quote_close
+
+==================
+A nonfinal CR in an unfinished quoted macro name stays invalid
+:cst
+==================
+"[attr]ab
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:10       name: attribute_name
+0:7  - 0:8          name_text `a`
+0:8  - 0:9          issue: syntax_issue
+0:8  - 0:9            invalid_syntax
+0:8  - 0:9              invalid_name_character `\r`
+0:9  - 0:10         name_text `b`
+0:10 - 0:10       issue: syntax_issue
+0:10 - 0:10         incomplete_syntax
+0:10 - 0:10           missing_quote_close
+
+==================
+Closing the quote fixes a literal CR as an invalid name character
+:cst
+==================
+"[attr]a"
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:9        name: attribute_name
+0:7  - 0:8          name_text `a`
+0:8  - 0:9          issue: syntax_issue
+0:8  - 0:9            invalid_syntax
+0:8  - 0:9              invalid_name_character `\r`
+0:9  - 0:10       closing: quote_close `\"`
+
+==================
+An escaped CR at EOF stays an invalid name character
+:cst
+==================
+"[attr]a\r
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:10       name: attribute_name
+0:7  - 0:8          name_text `a`
+0:8  - 0:10         issue: syntax_issue
+0:8  - 0:10           invalid_syntax
+0:8  - 0:10             invalid_name_character
+0:8  - 0:10               quoted_escape `\\r`
+0:10 - 0:10       issue: syntax_issue
+0:10 - 0:10         incomplete_syntax
+0:10 - 0:10           missing_quote_close
+
+==================
+A macro name backslash followed by EOF CR stays an invalid quoted escape
+:cst
+==================
+"[attr]a\
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:10       name: attribute_name
+0:7  - 0:8          name_text `a`
+0:8  - 0:10         issue: syntax_issue
+0:8  - 0:10           invalid_syntax
+0:8  - 0:10             invalid_quoted_escape `\\\r`
+0:10 - 0:10       issue: syntax_issue
+0:10 - 0:10         incomplete_syntax
+0:10 - 0:10           missing_quote_close
+
+==================
+Contiguous forbidden macro name characters form one issue
+:cst
+==================
+[attr]a@@b text
+---
+
+0:0  - 0:15   document
+0:0  - 0:15     macro_definition
+0:0  - 0:6        marker: macro_marker `[attr]`
+0:6  - 0:10       name: attribute_name
+0:6  - 0:7          name_text `a`
+0:7  - 0:9          issue: syntax_issue
+0:7  - 0:9            invalid_syntax
+0:7  - 0:9              invalid_name_character `@@`
+0:9  - 0:10         name_text `b`
+0:11 - 0:15       attribute
+0:11 - 0:15         name: attribute_name
+0:11 - 0:15           name_text `text`
+
+==================
+Quoted macro with an invalid encoded name character
+:cst
+==================
+"[attr]a\044b" text
+---
+
+0:0  - 0:19   document
+0:0  - 0:19     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:13       name: attribute_name
+0:7  - 0:8          name_text `a`
+0:8  - 0:12         issue: syntax_issue
+0:8  - 0:12           invalid_syntax
+0:8  - 0:12             invalid_name_character
+0:8  - 0:12               quoted_escape `\\044`
+0:12 - 0:13         name_text `b`
+0:13 - 0:14       closing: quote_close `\"`
+0:15 - 0:19       attribute
+0:15 - 0:19         name: attribute_name
+0:15 - 0:19           name_text `text`
+
+==================
+Missing macro name at EOF
+:cst
+==================
+[attr]
+---
+
+0:0 - 0:6   document
+0:0 - 0:6     macro_definition
+0:0 - 0:6       marker: macro_marker `[attr]`
+0:6 - 0:6       issue: syntax_issue
+0:6 - 0:6         incomplete_syntax
+0:6 - 0:6           missing_attribute_name
+
+==================
+Invalid macro name characters preserve valid quoted escapes
+:cst
+==================
+"[attr]a\044b\tc" text
+---
+
+0:0  - 0:22   document
+0:0  - 0:22     macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:16       name: attribute_name
+0:7  - 0:8          name_text `a`
+0:8  - 0:12         issue: syntax_issue
+0:8  - 0:12           invalid_syntax
+0:8  - 0:12             invalid_name_character
+0:8  - 0:12               quoted_escape `\\044`
+0:12 - 0:13         name_text `b`
+0:13 - 0:15         issue: syntax_issue
+0:13 - 0:15           invalid_syntax
+0:13 - 0:15             invalid_name_character
+0:13 - 0:15               quoted_escape `\\t`
+0:15 - 0:16         name_text `c`
+0:16 - 0:17       closing: quote_close `\"`
+0:18 - 0:22       attribute
+0:18 - 0:22         name: attribute_name
+0:18 - 0:22           name_text `text`
+
+==================
+Quoted macro definition and use retain separate owners
+:cst
+==================
+"[attr]foo" audit_probe
+* foo
+
+---
+
+0:0  - 2:0    document
+0:0  - 1:0      macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:7        marker: macro_marker `[attr]`
+0:7  - 0:10       name: attribute_name
+0:7  - 0:10         name_text `foo`
+0:10 - 0:11       closing: quote_close `\"`
+0:12 - 0:23       attribute
+0:12 - 0:23         name: attribute_name
+0:12 - 0:23           name_text `audit_probe`
+0:23 - 1:0        line_ending
+0:23 - 0:24         `\n`
+1:0  - 2:0      attribute_rule
+1:0  - 1:1        pattern: pattern
+1:0  - 1:1          wildcard `*`
+1:2  - 1:5        attribute
+1:2  - 1:5          name: attribute_name
+1:2  - 1:5            name_text `foo`
+1:5  - 2:0        line_ending
+1:5  - 1:6          `\n`
+
+==================
+Encoded macro definition and use retain original source
+:cst
+==================
+"\133attr]\146oo" audit_probe
+* foo
+
+---
+
+0:0  - 2:0    document
+0:0  - 1:0      macro_definition
+0:0  - 0:1        opening: quote_open `\"`
+0:1  - 0:10       marker: macro_marker `\\133attr]`
+0:10 - 0:16       name: attribute_name
+0:10 - 0:14         quoted_escape `\\146`
+0:14 - 0:16         name_text `oo`
+0:16 - 0:17       closing: quote_close `\"`
+0:18 - 0:29       attribute
+0:18 - 0:29         name: attribute_name
+0:18 - 0:29           name_text `audit_probe`
+0:29 - 1:0        line_ending
+0:29 - 0:30         `\n`
+1:0  - 2:0      attribute_rule
+1:0  - 1:1        pattern: pattern
+1:0  - 1:1          wildcard `*`
+1:2  - 1:5        attribute
+1:2  - 1:5          name: attribute_name
+1:2  - 1:5            name_text `foo`
+1:5  - 2:0        line_ending
+1:5  - 1:6          `\n`
+
+==================
+VT and FF are invalid within one macro name
+:cst
+==================
+[attr]n text
+---
+
+0:0  - 0:14   document
+0:0  - 0:14     macro_definition
+0:0  - 0:6        marker: macro_marker `[attr]`
+0:6  - 0:9        name: attribute_name
+0:6  - 0:7          name_text `n`
+0:7  - 0:9          issue: syntax_issue
+0:7  - 0:9            invalid_syntax
+0:7  - 0:9              invalid_name_character `\v\f`
+0:10 - 0:14       attribute
+0:10 - 0:14         name: attribute_name
+0:10 - 0:14           name_text `text`

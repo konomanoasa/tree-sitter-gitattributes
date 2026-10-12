@@ -1,0 +1,381 @@
+==================
+Escaped slashes delimit recursive wildcards without changing escape leaves
+==================
+x\/**/b
+x/**\/b
+**\/b
+x\/**
+x\/***/b
+"x\134\057\052\052\134\057b"
+---
+
+(document
+  (attribute_rule pattern: (pattern (glob_literal) (escape) (recursive_wildcard) (path_separator) (glob_literal)) (line_ending))
+  (attribute_rule pattern: (pattern (glob_literal) (path_separator) (recursive_wildcard) (escape) (glob_literal)) (line_ending))
+  (attribute_rule pattern: (pattern (recursive_wildcard) (escape) (glob_literal)) (line_ending))
+  (attribute_rule pattern: (pattern (glob_literal) (escape) (recursive_wildcard)) (line_ending))
+  (attribute_rule pattern: (pattern (glob_literal) (escape) (wildcard) (path_separator) (glob_literal)) (line_ending))
+  (attribute_rule pattern: (pattern opening: (quote_open) (glob_literal) (escape) (recursive_wildcard) (escape) (glob_literal) closing: (quote_close))))
+
+==================
+Escaped slash before a recursive wildcard
+:cst
+==================
+x\/**/b
+---
+
+0:0 - 0:7   document
+0:0 - 0:7     attribute_rule
+0:0 - 0:7       pattern: pattern
+0:0 - 0:1         glob_literal `x`
+0:1 - 0:3         escape `\\/`
+0:3 - 0:5         recursive_wildcard `**`
+0:5 - 0:6         path_separator `/`
+0:6 - 0:7         glob_literal `b`
+
+==================
+Escaped slash after a recursive wildcard
+:cst
+==================
+x/**\/b
+---
+
+0:0 - 0:7   document
+0:0 - 0:7     attribute_rule
+0:0 - 0:7       pattern: pattern
+0:0 - 0:1         glob_literal `x`
+0:1 - 0:2         path_separator `/`
+0:2 - 0:4         recursive_wildcard `**`
+0:4 - 0:6         escape `\\/`
+0:6 - 0:7         glob_literal `b`
+
+==================
+Escaped slashes around a recursive wildcard
+:cst
+==================
+x\/**\/b
+---
+
+0:0 - 0:8   document
+0:0 - 0:8     attribute_rule
+0:0 - 0:8       pattern: pattern
+0:0 - 0:1         glob_literal `x`
+0:1 - 0:3         escape `\\/`
+0:3 - 0:5         recursive_wildcard `**`
+0:5 - 0:7         escape `\\/`
+0:7 - 0:8         glob_literal `b`
+
+==================
+Leading recursive wildcard before an escaped slash
+:cst
+==================
+**\/b
+---
+
+0:0 - 0:5   document
+0:0 - 0:5     attribute_rule
+0:0 - 0:5       pattern: pattern
+0:0 - 0:2         recursive_wildcard `**`
+0:2 - 0:4         escape `\\/`
+0:4 - 0:5         glob_literal `b`
+
+==================
+Escaped nonseparator does not start a component
+:cst
+==================
+x\a**/b
+---
+
+0:0 - 0:7   document
+0:0 - 0:7     attribute_rule
+0:0 - 0:7       pattern: pattern
+0:0 - 0:1         glob_literal `x`
+0:1 - 0:3         escape `\\a`
+0:3 - 0:5         wildcard `**`
+0:5 - 0:6         path_separator `/`
+0:6 - 0:7         glob_literal `b`
+
+==================
+Escaped nonseparator does not end a component
+:cst
+==================
+x/**\a/b
+---
+
+0:0 - 0:8   document
+0:0 - 0:8     attribute_rule
+0:0 - 0:8       pattern: pattern
+0:0 - 0:1         glob_literal `x`
+0:1 - 0:2         path_separator `/`
+0:2 - 0:4         wildcard `**`
+0:4 - 0:6         escape `\\a`
+0:6 - 0:7         path_separator `/`
+0:7 - 0:8         glob_literal `b`
+
+==================
+Escaped backslash before slash does not end a component
+:cst
+==================
+x/**\\/b
+---
+
+0:0 - 0:8   document
+0:0 - 0:8     attribute_rule
+0:0 - 0:8       pattern: pattern
+0:0 - 0:1         glob_literal `x`
+0:1 - 0:2         path_separator `/`
+0:2 - 0:4         wildcard `**`
+0:4 - 0:6         escape `\\\\`
+0:6 - 0:7         path_separator `/`
+0:7 - 0:8         glob_literal `b`
+
+==================
+Escaped slash does not make three asterisks recursive
+:cst
+==================
+x\/***/b
+---
+
+0:0 - 0:8   document
+0:0 - 0:8     attribute_rule
+0:0 - 0:8       pattern: pattern
+0:0 - 0:1         glob_literal `x`
+0:1 - 0:3         escape `\\/`
+0:3 - 0:6         wildcard `***`
+0:6 - 0:7         path_separator `/`
+0:7 - 0:8         glob_literal `b`
+
+==================
+Slash inside a set does not start a component
+:cst
+==================
+[\/]**/b
+---
+
+0:0 - 0:8   document
+0:0 - 0:8     attribute_rule
+0:0 - 0:8       pattern: pattern
+0:0 - 0:4         character_set
+0:0 - 0:1           opening: set_open `[`
+0:1 - 0:3           escape `\\/`
+0:3 - 0:4           closing: set_close `]`
+0:4 - 0:6         wildcard `**`
+0:6 - 0:7         path_separator `/`
+0:7 - 0:8         glob_literal `b`
+
+==================
+C-quoted escaped slash before a recursive wildcard
+:cst
+==================
+"x\\/**/b"
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     attribute_rule
+0:0  - 0:10       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:2          glob_literal `x`
+0:2  - 0:5          escape `\\\\/`
+0:5  - 0:7          recursive_wildcard `**`
+0:7  - 0:8          path_separator `/`
+0:8  - 0:9          glob_literal `b`
+0:9  - 0:10         closing: quote_close `\"`
+
+==================
+C-quoted escaped slash after a recursive wildcard
+:cst
+==================
+"x/**\\/b"
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     attribute_rule
+0:0  - 0:10       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:2          glob_literal `x`
+0:2  - 0:3          path_separator `/`
+0:3  - 0:5          recursive_wildcard `**`
+0:5  - 0:8          escape `\\\\/`
+0:8  - 0:9          glob_literal `b`
+0:9  - 0:10         closing: quote_close `\"`
+
+==================
+C-quoted escaped slashes around a recursive wildcard
+:cst
+==================
+"x\\/**\\/b"
+---
+
+0:0  - 0:12   document
+0:0  - 0:12     attribute_rule
+0:0  - 0:12       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:2          glob_literal `x`
+0:2  - 0:5          escape `\\\\/`
+0:5  - 0:7          recursive_wildcard `**`
+0:7  - 0:10         escape `\\\\/`
+0:10 - 0:11         glob_literal `b`
+0:11 - 0:12         closing: quote_close `\"`
+
+==================
+Octal spellings preserve escaped separator boundaries
+:cst
+==================
+"x\134\057\052\052\134\057b"
+---
+
+0:0  - 0:28   document
+0:0  - 0:28     attribute_rule
+0:0  - 0:28       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:2          glob_literal `x`
+0:2  - 0:10         escape `\\134\\057`
+0:10 - 0:18         recursive_wildcard `\\052\\052`
+0:18 - 0:26         escape `\\134\\057`
+0:26 - 0:27         glob_literal `b`
+0:27 - 0:28         closing: quote_close `\"`
+
+==================
+Three asterisks between separators follow the manual
+:cst
+==================
+a/***/b
+---
+
+0:0 - 0:7   document
+0:0 - 0:7     attribute_rule
+0:0 - 0:7       pattern: pattern
+0:0 - 0:1         glob_literal `a`
+0:1 - 0:2         path_separator `/`
+0:2 - 0:5         wildcard `***`
+0:5 - 0:6         path_separator `/`
+0:6 - 0:7         glob_literal `b`
+
+==================
+Quoted whitespace and wildcard
+:cst
+==================
+"a b/*.c" text
+---
+
+0:0  - 0:14   document
+0:0  - 0:14     attribute_rule
+0:0  - 0:9        pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:4          glob_literal `a b`
+0:4  - 0:5          path_separator `/`
+0:5  - 0:6          wildcard `*`
+0:6  - 0:8          glob_literal `.c`
+0:8  - 0:9          closing: quote_close `\"`
+0:10 - 0:14       attribute
+0:10 - 0:14         name: attribute_name
+0:10 - 0:14           name_text `text`
+
+==================
+Octal wildcard
+:cst
+==================
+"\052.c" text
+---
+
+0:0  - 0:13   document
+0:0  - 0:13     attribute_rule
+0:0  - 0:8        pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:5          wildcard `\\052`
+0:5  - 0:7          glob_literal `.c`
+0:7  - 0:8          closing: quote_close `\"`
+0:9  - 0:13       attribute
+0:9  - 0:13         name: attribute_name
+0:9  - 0:13           name_text `text`
+
+==================
+Recursive wildcard positions
+:cst
+==================
+**/a/**/b/** text
+---
+
+0:0  - 0:17   document
+0:0  - 0:17     attribute_rule
+0:0  - 0:12       pattern: pattern
+0:0  - 0:2          recursive_wildcard `**`
+0:2  - 0:3          path_separator `/`
+0:3  - 0:4          glob_literal `a`
+0:4  - 0:5          path_separator `/`
+0:5  - 0:7          recursive_wildcard `**`
+0:7  - 0:8          path_separator `/`
+0:8  - 0:9          glob_literal `b`
+0:9  - 0:10         path_separator `/`
+0:10 - 0:12         recursive_wildcard `**`
+0:13 - 0:17       attribute
+0:13 - 0:17         name: attribute_name
+0:13 - 0:17           name_text `text`
+
+==================
+Standalone double asterisk is ordinary
+:cst
+==================
+**
+---
+
+0:0 - 0:2   document
+0:0 - 0:2     attribute_rule
+0:0 - 0:2       pattern: pattern
+0:0 - 0:2         wildcard `**`
+
+==================
+Long asterisk run is ordinary
+:cst
+==================
+***/
+---
+
+0:0 - 0:4   document
+0:0 - 0:4     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:3         wildcard `***`
+0:3 - 0:4         path_separator `/`
+
+==================
+Adjacent text makes double asterisk ordinary
+:cst
+==================
+a**/
+---
+
+0:0 - 0:4   document
+0:0 - 0:4     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:1         glob_literal `a`
+0:1 - 0:3         wildcard `**`
+0:3 - 0:4         path_separator `/`
+
+==================
+Escaped slash starts a trailing recursive wildcard
+:cst
+==================
+\/**
+---
+
+0:0 - 0:4   document
+0:0 - 0:4     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:2         escape `\\/`
+0:2 - 0:4         recursive_wildcard `**`
+
+==================
+Quoted slash and asterisks form recursive wildcard
+:cst
+==================
+"a\057\052\052"
+---
+
+0:0  - 0:15   document
+0:0  - 0:15     attribute_rule
+0:0  - 0:15       pattern: pattern
+0:0  - 0:1          opening: quote_open `\"`
+0:1  - 0:2          glob_literal `a`
+0:2  - 0:6          path_separator `\\057`
+0:6  - 0:14         recursive_wildcard `\\052\\052`
+0:14 - 0:15         closing: quote_close `\"`

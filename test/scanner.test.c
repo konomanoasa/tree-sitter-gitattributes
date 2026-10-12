@@ -44,6 +44,12 @@ struct MockLexer {
   size_t mark;
 };
 
+struct TokenCase {
+  enum Token token;
+  size_t start;
+  size_t end;
+};
+
 static void mock_advance(TSLexer *lexer, bool skip) {
   (void)skip;
   struct MockLexer *mock = (struct MockLexer *)lexer;
@@ -81,6 +87,40 @@ init_mock_lexer(struct MockLexer *mock, const int32_t *input, size_t length) {
   };
 }
 
+static Scanner scan_restored_tokens(
+  const int32_t *input,
+  size_t length,
+  const struct TokenCase *cases,
+  size_t case_count
+) {
+  Scanner scanner = {0};
+  for (size_t index = 0; index < case_count; index += 1) {
+    const struct TokenCase *expected = &cases[index];
+    bool valid_symbols[ERROR_SENTINEL + 1] = {false};
+    valid_symbols[expected->token] = true;
+    struct MockLexer mock;
+    init_mock_lexer(&mock, input + expected->start, length - expected->start);
+    assert(tree_sitter_gitattributes_external_scanner_scan(
+      &scanner,
+      &mock.lexer,
+      valid_symbols
+    ));
+    assert(mock.lexer.result_symbol == expected->token);
+    assert(mock.mark == expected->end - expected->start);
+    char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE];
+    const unsigned serialized =
+      tree_sitter_gitattributes_external_scanner_serialize(&scanner, buffer);
+    Scanner restored = {0};
+    tree_sitter_gitattributes_external_scanner_deserialize(
+      &restored,
+      buffer,
+      serialized
+    );
+    scanner = restored;
+  }
+  return scanner;
+}
+
 static void test_internal_lexer_accepts_eof_only_at_input_end(void) {
   const int32_t input[] = {'x', 0, '\n', 0xfeff, -1};
   for (size_t index = 0; index < sizeof(input) / sizeof(input[0]); index += 1) {
@@ -111,27 +151,30 @@ static void test_lifecycle_and_serialization_round_trip(void) {
     .kind = COMMENT_START,
   };
   *scanner = expected;
-  char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE + 2];
-  memset(buffer, 0x5a, sizeof(buffer));
-  const unsigned length =
-    tree_sitter_gitattributes_external_scanner_serialize(scanner, buffer + 1);
+  enum { GUARD_SIZE = 1, GUARD_BYTE = 0x5a };
+  char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE + 2 * GUARD_SIZE];
+  memset(buffer, GUARD_BYTE, sizeof(buffer));
+  const unsigned length = tree_sitter_gitattributes_external_scanner_serialize(
+    scanner,
+    buffer + GUARD_SIZE
+  );
   assert(length == sizeof(Scanner));
   assert(length <= TREE_SITTER_SERIALIZATION_BUFFER_SIZE);
-  assert(buffer[0] == 0x5a);
-  for (size_t index = length + 1; index < sizeof(buffer); index += 1) {
-    assert(buffer[index] == 0x5a);
+  assert(buffer[0] == GUARD_BYTE);
+  for (size_t index = length + GUARD_SIZE; index < sizeof(buffer); index += 1) {
+    assert(buffer[index] == GUARD_BYTE);
   }
   tree_sitter_gitattributes_external_scanner_deserialize(scanner, NULL, 0);
   assert(memcmp(scanner, &initial, sizeof(initial)) == 0);
   tree_sitter_gitattributes_external_scanner_deserialize(
     scanner,
-    buffer + 1,
+    buffer + GUARD_SIZE,
     length
   );
   assert(memcmp(scanner, &expected, sizeof(expected)) == 0);
   tree_sitter_gitattributes_external_scanner_deserialize(
     scanner,
-    buffer + 1,
+    buffer + GUARD_SIZE,
     length - 1
   );
   assert(memcmp(scanner, &initial, sizeof(initial)) == 0);
@@ -148,7 +191,7 @@ static void test_disabled_and_recovery_scans_preserve_state(void) {
     Scanner scanner = {0};
     const Scanner expected = scanner;
     struct MockLexer mock;
-    init_mock_lexer(&mock, input, 3);
+    init_mock_lexer(&mock, input, sizeof(input) / sizeof(input[0]));
     assert(!tree_sitter_gitattributes_external_scanner_scan(
       &scanner,
       &mock.lexer,
@@ -160,40 +203,19 @@ static void test_disabled_and_recovery_scans_preserve_state(void) {
 
 static void test_restored_comment_state_preserves_token_ranges(void) {
   const int32_t input[] = {'#', 'a', 0, '\r', '\n'};
-  const struct {
-    enum Token token;
-    size_t start;
-    size_t end;
-  } cases[] = {
+  const size_t length = sizeof(input) / sizeof(input[0]);
+  const struct TokenCase cases[] = {
     {LINE_START, 0, 0},
     {COMMENT_START, 0, 0},
     {COMMENT_MARKER, 0, 1},
     {COMMENT_TEXT, 1, 3},
   };
-  Scanner scanner = {0};
-  for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index += 1) {
-    bool valid_symbols[ERROR_SENTINEL + 1] = {false};
-    valid_symbols[cases[index].token] = true;
-    struct MockLexer mock;
-    init_mock_lexer(&mock, input + cases[index].start, 5 - cases[index].start);
-    assert(tree_sitter_gitattributes_external_scanner_scan(
-      &scanner,
-      &mock.lexer,
-      valid_symbols
-    ));
-    assert(mock.lexer.result_symbol == cases[index].token);
-    assert(mock.mark == cases[index].end - cases[index].start);
-    char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE];
-    const unsigned length =
-      tree_sitter_gitattributes_external_scanner_serialize(&scanner, buffer);
-    Scanner restored = {0};
-    tree_sitter_gitattributes_external_scanner_deserialize(
-      &restored,
-      buffer,
-      length
-    );
-    scanner = restored;
-  }
+  const Scanner scanner = scan_restored_tokens(
+    input,
+    length,
+    cases,
+    sizeof(cases) / sizeof(cases[0])
+  );
   assert(scanner.position == 3);
 }
 
@@ -201,11 +223,7 @@ static void test_restored_glob_state_preserves_token_ranges(void) {
   const int32_t input[] =
     {'[', '^', 'a', ']', '[', '[', ':', 'd', ':', ']', ']', '['};
   const size_t length = sizeof(input) / sizeof(input[0]);
-  const struct {
-    enum Token token;
-    size_t start;
-    size_t end;
-  } cases[] = {
+  const struct TokenCase cases[] = {
     {LINE_START, 0, 0},
     {RULE_START, 0, 0},
     {GLOB_START, 0, 0},
@@ -229,36 +247,14 @@ static void test_restored_glob_state_preserves_token_ranges(void) {
     {PATTERN_END, 12, 12},
     {END_OF_FILE, 12, 12},
   };
-  Scanner scanner = {0};
-  for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index += 1) {
-    bool valid_symbols[ERROR_SENTINEL + 1] = {false};
-    valid_symbols[cases[index].token] = true;
-    struct MockLexer mock;
-    init_mock_lexer(
-      &mock,
-      input + cases[index].start,
-      length - cases[index].start
-    );
-    assert(tree_sitter_gitattributes_external_scanner_scan(
-      &scanner,
-      &mock.lexer,
-      valid_symbols
-    ));
-    assert(mock.lexer.result_symbol == cases[index].token);
-    assert(mock.mark == cases[index].end - cases[index].start);
-    char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE];
-    const unsigned serialized =
-      tree_sitter_gitattributes_external_scanner_serialize(&scanner, buffer);
-    Scanner restored = {0};
-    tree_sitter_gitattributes_external_scanner_deserialize(
-      &restored,
-      buffer,
-      serialized
-    );
-    scanner = restored;
-  }
-  assert(scanner.position == 12);
-  assert(scanner.set_end == 12 && scanner.set_close_end == 12);
+  const Scanner scanner = scan_restored_tokens(
+    input,
+    length,
+    cases,
+    sizeof(cases) / sizeof(cases[0])
+  );
+  assert(scanner.position == length);
+  assert(scanner.set_end == length && scanner.set_close_end == length);
 }
 
 #ifdef TREE_SITTER_REUSE_ALLOCATOR
