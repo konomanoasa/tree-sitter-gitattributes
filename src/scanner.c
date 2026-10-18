@@ -199,7 +199,7 @@ static int32_t simple_escape(int32_t c) {
   }
 }
 
-// The cursor has passed the backslash.
+// Backslash already consumed.
 static void quoted_escape(Cursor *r) {
   const int32_t c = r->lexer->lookahead;
   r->kind = QUOTED_ESCAPE;
@@ -301,7 +301,7 @@ static bool start_content(Scanner *s, TSLexer *lexer, const bool *valid) {
   while (s->position < s->leading) advance(s, lexer);
   lexer->mark_end(lexer);
   if (s->kind == RULE_START) {
-    // The opening quote is lookahead; QUOTE_OPEN consumes it later.
+    // QUOTE_OPEN consumes this lookahead quote later.
     if (s->quoted) lexer->advance(lexer, false);
     Cursor r = {
       .s = s,
