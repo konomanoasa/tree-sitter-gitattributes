@@ -156,6 +156,11 @@ static bool consume(
   return emit(lexer, valid, token);
 }
 
+static bool
+take(Scanner *s, TSLexer *lexer, const bool *valid, enum Token token) {
+  return consume(s, lexer, valid, token, s->position + 1);
+}
+
 static bool text_run(
   Scanner *s,
   TSLexer *lexer,
@@ -199,7 +204,6 @@ static int32_t simple_escape(int32_t c) {
   }
 }
 
-// Backslash already consumed.
 static void quoted_escape(Cursor *r) {
   const int32_t c = r->lexer->lookahead;
   r->kind = QUOTED_ESCAPE;
@@ -691,25 +695,23 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
     (valid[UNSET_MARKER] || valid[UNSPECIFIED_MARKER]) &&
     s->position < s->name_start
   )
-    return consume(
+    return take(
       s,
       lexer,
       valid,
-      lexer->lookahead == '-' ? UNSET_MARKER : UNSPECIFIED_MARKER,
-      s->position + 1
+      lexer->lookahead == '-' ? UNSET_MARKER : UNSPECIFIED_MARKER
     );
   if (valid[NAME_TEXT]) return name_piece(s, lexer, valid);
   if (valid[VALUE_TEXT])
     return text_run(s, lexer, valid, VALUE_TEXT, s->token_end);
   if (valid[ASSIGNMENT_OPERATOR] && lexer->lookahead == '=')
-    return consume(s, lexer, valid, ASSIGNMENT_OPERATOR, s->position + 1);
+    return take(s, lexer, valid, ASSIGNMENT_OPERATOR);
   if (
     (valid[QUOTE_CLOSE] || valid[MISSING_QUOTE_CLOSE]) &&
     s->quoted &&
     s->position == s->content_end
   ) {
-    if (s->content_end < s->line_end)
-      return consume(s, lexer, valid, QUOTE_CLOSE, s->position + 1);
+    if (s->content_end < s->line_end) return take(s, lexer, valid, QUOTE_CLOSE);
     return emit(
       lexer,
       valid,
@@ -721,12 +723,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
   if (s->position >= s->line_end)
     return lexer->eof(lexer) && emit(lexer, valid, END_OF_FILE);
   if (s->kind == COMMENT_START) {
-    if (s->position == s->leading)
-      return consume(s, lexer, valid, COMMENT_MARKER, s->position + 1);
+    if (s->position == s->leading) return take(s, lexer, valid, COMMENT_MARKER);
     return text_run(s, lexer, valid, COMMENT_TEXT, s->line_end);
   }
   if (valid[QUOTE_OPEN] && s->quoted && s->position == s->leading)
-    return consume(s, lexer, valid, QUOTE_OPEN, s->position + 1);
+    return take(s, lexer, valid, QUOTE_OPEN);
   if (valid[MACRO_MARKER])
     return consume(s, lexer, valid, MACRO_MARKER, s->name_start);
   if (valid[SEPARATOR] || valid[LAYOUT]) {

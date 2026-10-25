@@ -11,20 +11,6 @@ Quoted glob retains ranges in original source
   (attribute name: (attribute_name (name_text)))))
 
 ==================
-Newline completes invalid quotation and preserves the next rule
-==================
-"a\q
-next text
-
----
-
-(document
-  (attribute_rule pattern: (pattern opening: (quote_open) (glob_literal)
-    issue: (syntax_issue (invalid_syntax (invalid_quoted_escape)))
-    issue: (syntax_issue (invalid_syntax (missing_quote_close)))) (line_ending))
-  (attribute_rule pattern: (pattern (glob_literal)) (attribute name: (attribute_name (name_text))) (line_ending)))
-
-==================
 Quoted glob escape
 :cst
 ==================
@@ -138,23 +124,18 @@ Initial hash inside quotation is literal
 0:5 - 0:9           name_text `text`
 
 ==================
-A pattern backslash followed by EOF CR stays an invalid quoted escape
-:cst
+Newline completes invalid quotation and preserves the next rule
 ==================
-"a\
+"a\q
+next text
+
 ---
 
-0:0 - 0:4   document
-0:0 - 0:4     attribute_rule
-0:0 - 0:4       pattern: pattern
-0:0 - 0:1         opening: quote_open `\"`
-0:1 - 0:2         glob_literal `a`
-0:2 - 0:4         issue: syntax_issue
-0:2 - 0:4           invalid_syntax
-0:2 - 0:4             invalid_quoted_escape `\\\r`
-0:4 - 0:4         issue: syntax_issue
-0:4 - 0:4           incomplete_syntax
-0:4 - 0:4             missing_quote_close
+(document
+  (attribute_rule pattern: (pattern opening: (quote_open) (glob_literal)
+    issue: (syntax_issue (invalid_syntax (invalid_quoted_escape)))
+    issue: (syntax_issue (invalid_syntax (missing_quote_close)))) (line_ending))
+  (attribute_rule pattern: (pattern (glob_literal)) (attribute name: (attribute_name (name_text))) (line_ending)))
 
 ==================
 CRLF ends a quoted escape without repairing it
@@ -177,22 +158,6 @@ CRLF ends a quoted escape without repairing it
 0:3 - 0:3             missing_quote_close
 0:3 - 1:0       line_ending
 0:3 - 0:5         `\r\n`
-
-==================
-Missing quote at EOF
-:cst
-==================
-"a b
----
-
-0:0 - 0:4   document
-0:0 - 0:4     attribute_rule
-0:0 - 0:4       pattern: pattern
-0:0 - 0:1         opening: quote_open `\"`
-0:1 - 0:4         glob_literal `a b`
-0:4 - 0:4         issue: syntax_issue
-0:4 - 0:4           incomplete_syntax
-0:4 - 0:4             missing_quote_close
 
 ==================
 Missing quote before newline
@@ -261,24 +226,6 @@ Invalid quote escape
 0:7  - 0:11           name_text `text`
 
 ==================
-Incomplete octal and quote
-:cst
-==================
-"\12
----
-
-0:0 - 0:4   document
-0:0 - 0:4     attribute_rule
-0:0 - 0:4       pattern: pattern
-0:0 - 0:1         opening: quote_open `\"`
-0:1 - 0:4         issue: syntax_issue
-0:1 - 0:4           incomplete_syntax
-0:1 - 0:4             incomplete_quoted_escape `\\12`
-0:4 - 0:4         issue: syntax_issue
-0:4 - 0:4           incomplete_syntax
-0:4 - 0:4             missing_quote_close
-
-==================
 Octal ended by quote
 :cst
 ==================
@@ -316,25 +263,6 @@ Octal negation
 0:8  - 0:12       attribute
 0:8  - 0:12         name: attribute_name
 0:8  - 0:12           name_text `text`
-
-==================
-Quote and escape incomplete at EOF
-:cst
-==================
-"a\
----
-
-0:0 - 0:3   document
-0:0 - 0:3     attribute_rule
-0:0 - 0:3       pattern: pattern
-0:0 - 0:1         opening: quote_open `\"`
-0:1 - 0:2         glob_literal `a`
-0:2 - 0:3         issue: syntax_issue
-0:2 - 0:3           incomplete_syntax
-0:2 - 0:3             incomplete_quoted_escape `\\`
-0:3 - 0:3         issue: syntax_issue
-0:3 - 0:3           incomplete_syntax
-0:3 - 0:3             missing_quote_close
 
 ==================
 Invalid hexadecimal escape
@@ -431,3 +359,75 @@ VT and FF after a closing quote do not provide a separator
 0:3 - 0:5             invalid_syntax
 0:3 - 0:5               invalid_name_character `\v\f`
 0:5 - 0:9           name_text `text`
+
+==================
+A pattern backslash followed by EOF CR stays an invalid quoted escape
+:cst
+==================
+"a\
+---
+
+0:0 - 0:4   document
+0:0 - 0:4     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:1         opening: quote_open `\"`
+0:1 - 0:2         glob_literal `a`
+0:2 - 0:4         issue: syntax_issue
+0:2 - 0:4           invalid_syntax
+0:2 - 0:4             invalid_quoted_escape `\\\r`
+0:4 - 0:4         issue: syntax_issue
+0:4 - 0:4           incomplete_syntax
+0:4 - 0:4             missing_quote_close
+
+==================
+Missing quote at EOF
+:cst
+==================
+"a b
+---
+
+0:0 - 0:4   document
+0:0 - 0:4     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:1         opening: quote_open `\"`
+0:1 - 0:4         glob_literal `a b`
+0:4 - 0:4         issue: syntax_issue
+0:4 - 0:4           incomplete_syntax
+0:4 - 0:4             missing_quote_close
+
+==================
+Incomplete octal and quote
+:cst
+==================
+"\12
+---
+
+0:0 - 0:4   document
+0:0 - 0:4     attribute_rule
+0:0 - 0:4       pattern: pattern
+0:0 - 0:1         opening: quote_open `\"`
+0:1 - 0:4         issue: syntax_issue
+0:1 - 0:4           incomplete_syntax
+0:1 - 0:4             incomplete_quoted_escape `\\12`
+0:4 - 0:4         issue: syntax_issue
+0:4 - 0:4           incomplete_syntax
+0:4 - 0:4             missing_quote_close
+
+==================
+Quote and escape incomplete at EOF
+:cst
+==================
+"a\
+---
+
+0:0 - 0:3   document
+0:0 - 0:3     attribute_rule
+0:0 - 0:3       pattern: pattern
+0:0 - 0:1         opening: quote_open `\"`
+0:1 - 0:2         glob_literal `a`
+0:2 - 0:3         issue: syntax_issue
+0:2 - 0:3           incomplete_syntax
+0:2 - 0:3             incomplete_quoted_escape `\\`
+0:3 - 0:3         issue: syntax_issue
+0:3 - 0:3           incomplete_syntax
+0:3 - 0:3             missing_quote_close

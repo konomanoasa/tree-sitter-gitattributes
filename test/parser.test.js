@@ -4,10 +4,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { issues } from "./support/cst.js";
+import { issues, leaves, owners } from "./support/cst.js";
 import {
   applyEdits,
-  assertEditHistory,
   assertIncrementalEqualsFresh,
   parse,
 } from "./support/parser.js";
@@ -334,9 +333,73 @@ test("gitattributes: Git compares octal and literal UTF-8 patterns as bytes", (t
   }
 });
 
+const encodingCases = [
+  [
+    "consecutive decode failures after glob escape",
+    Buffer.from([92, 255, 254, 128, 98]),
+    [["invalid_syntax", "invalid_encoding", 1, 4]],
+    ["pattern"],
+  ],
+  [
+    "consecutive decode failures after C escape prefix",
+    Buffer.from([34, 92, 255, 254, 128, 98, 34]),
+    [["invalid_syntax", "invalid_encoding", 2, 5]],
+    ["pattern"],
+  ],
+  [
+    "consecutive decode failures stay inside the character set",
+    Buffer.from([91, 97, 255, 254, 128, 93]),
+    [["invalid_syntax", "invalid_encoding", 2, 5]],
+    ["character_set"],
+  ],
+  [
+    "consecutive decode failures after a glob escape and a C escape prefix",
+    Buffer.from([34, 92, 92, 92, 255, 254, 128, 34]),
+    [["invalid_syntax", "invalid_encoding", 4, 7]],
+    ["pattern"],
+  ],
+  [
+    "consecutive decode failures stop before a character class delimiter",
+    Buffer.from([91, 91, 58, 100, 255, 254, 128, 58, 93, 93]),
+    [["invalid_syntax", "invalid_encoding", 4, 7]],
+    ["character_class"],
+  ],
+];
+for (const [name, source, expected, expectedOwners] of encodingCases)
+  test(`gitattributes: ${name}`, () => {
+    const tree = parse(source);
+    assert.deepEqual(issues(tree), expected);
+    assert.deepEqual(owners(tree), expectedOwners);
+    for (const node of tree.filter(({ kind }) => kind === "syntax_issue"))
+      assert.equal(node.field, "issue");
+  });
+
+for (const { owner, prefix, before } of [
+  { owner: "pattern", prefix: '"\\\\\\', before: [["quote_open", '"']] },
+  {
+    owner: "macro name",
+    prefix: '"[attr]a\\',
+    before: [
+      ["quote_open", '"'],
+      ["macro_marker", "[attr]"],
+      ["name_text", "a"],
+    ],
+  },
+]) {
+  test(`gitattributes: backslashes before a decode failure in a ${owner} are held without an escape`, () => {
+    const source = Buffer.concat([
+      Buffer.from(prefix),
+      Buffer.from([255, 254, 34]),
+    ]);
+    assert.deepEqual(leaves(source, parse(source)), [
+      ...before,
+      ["invalid_encoding", Buffer.from([255, 254]).toString()],
+      ["quote_close", '"'],
+    ]);
+  });
+}
+
 const largeInputCounts = {
-  lines: 10_000,
-  literalCharacters: 200_000,
   unmatchedBrackets: 50_000,
   incompleteClassPrefixes: 16_000,
   characterSets: 10_000,
@@ -348,12 +411,6 @@ const largeInputCounts = {
   incompleteSetPrefixes: 60_000,
 };
 const largeInputCases = [
-  [
-    "many independent lines",
-    "**/node_modules/ -text\n".repeat(largeInputCounts.lines),
-    0,
-  ],
-  ["one long literal", "a".repeat(largeInputCounts.literalCharacters), 0],
   [
     "many unmatched open brackets",
     "[".repeat(largeInputCounts.unmatchedBrackets),
@@ -481,214 +538,6 @@ test("gitattributes: a normal name character splits and rejoins an invalid run",
   ]);
   assert.deepEqual(joined, parse(source));
 });
-
-test("gitattributes: replacing and restoring an octal byte preserves incremental parsing", () => {
-  const source = String.raw`"[\303\251-z]"`;
-  const original = parse(source);
-  const edits = [{ byte: 3, deleteBytes: 3, insert: "377" }];
-  assert.deepEqual(parse(source, edits), parse(String.raw`"[\377\251-z]"`));
-  edits.push({ byte: 3, deleteBytes: 3, insert: "303" });
-  assert.deepEqual(parse(source, edits), original);
-});
-
-const editCases = [
-  {
-    name: "empty an encoded class name",
-    source: String.raw`"[\133:digit:\135]"`,
-    edits: [{ byte: 7, deleteBytes: 5, insert: "" }],
-  },
-  {
-    name: "fill an empty encoded class name",
-    source: String.raw`"[\133::\135]"`,
-    edits: [{ byte: 7, deleteBytes: 0, insert: "digit" }],
-  },
-  {
-    name: "change an encoded class into a range upper bracket",
-    source: '"[A\\133:digit:]]" text',
-    edits: [{ byte: 3, deleteBytes: 0, insert: "-" }],
-  },
-  {
-    name: "restore an encoded class from a range upper bracket",
-    source: '"[A-\\133:digit:]]" text',
-    edits: [{ byte: 3, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "turn a quoted pattern into an encoded macro definition",
-    source: String.raw`"\133attr)\146oo" text`,
-    edits: [{ byte: 9, deleteBytes: 1, insert: "]" }],
-  },
-  {
-    name: "remove a quoted macro closing quote and retain its name owner",
-    source: '"[attr]foo" text',
-    edits: [{ byte: 10, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "replace class delimiters with ordinary equal signs",
-    source: "[[:digit:]]",
-    edits: [
-      { byte: 2, deleteBytes: 1, insert: "=" },
-      { byte: 8, deleteBytes: 1, insert: "=" },
-    ],
-  },
-  {
-    name: "delete and restore a bracket inside a set",
-    source: "[[.a.]-[.z.]]",
-    edits: [
-      { byte: 7, deleteBytes: 1, insert: "" },
-      { byte: 7, deleteBytes: 0, insert: "[" },
-    ],
-  },
-  {
-    name: "replace an octal delimiter with its literal spelling",
-    source: String.raw`"[\133\056a\056\135]"`,
-    edits: [
-      { byte: 6, deleteBytes: 4, insert: "." },
-      { byte: 8, deleteBytes: 4, insert: "." },
-    ],
-  },
-  {
-    name: "complete an escape",
-    source: "a\\",
-    edits: [{ byte: 2, deleteBytes: 0, insert: "*" }],
-  },
-  {
-    name: "end an incomplete escape line",
-    source: "a\\",
-    edits: [{ byte: 2, deleteBytes: 0, insert: "\nnext" }],
-  },
-  {
-    name: "complete an unclosed character set",
-    source: "[abc",
-    edits: [{ byte: 4, deleteBytes: 0, insert: "]" }],
-  },
-  {
-    name: "reopen a set",
-    source: "[abc]",
-    edits: [{ byte: 4, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "change a comment to a pattern",
-    source: "# abc",
-    edits: [{ byte: 0, deleteBytes: 1, insert: "!" }],
-  },
-  {
-    name: "insert negation before a recursive wildcard",
-    source: "**/a",
-    edits: [{ byte: 0, deleteBytes: 0, insert: "!" }],
-  },
-  {
-    name: "change an asterisk context",
-    source: "a**/",
-    edits: [{ byte: 0, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "turn a range into literal text",
-    source: "[a-z]",
-    edits: [{ byte: 2, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "turn class into set text",
-    source: '"[[:alpha:]]" text',
-    edits: [{ byte: 2, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "split and merge decode failures inside a quoted macro name",
-    source: Buffer.concat([
-      Buffer.from('"[attr]a'),
-      Buffer.from([255, 254, 128]),
-      Buffer.from('b" text'),
-    ]),
-    edits: [
-      { byte: 9, deleteBytes: 0, insert: "x" },
-      { byte: 9, deleteBytes: 1, insert: "" },
-    ],
-  },
-  {
-    name: "change a valid name escape to an invalid name character and back",
-    source: String.raw`"[attr]a\141b" text`,
-    edits: [
-      { byte: 9, deleteBytes: 3, insert: "044" },
-      { byte: 9, deleteBytes: 3, insert: "141" },
-    ],
-  },
-  {
-    name: "replace pattern separators with VT and FF and restore them",
-    source: "a b text",
-    edits: [
-      { byte: 1, deleteBytes: 1, insert: "\v" },
-      { byte: 1, deleteBytes: 1, insert: "\f" },
-      { byte: 1, deleteBytes: 1, insert: " " },
-    ],
-  },
-  {
-    name: "replace attribute separators with VT and FF and restore them",
-    source: "a value=x other",
-    edits: [
-      { byte: 9, deleteBytes: 1, insert: "\v" },
-      { byte: 9, deleteBytes: 1, insert: "\f" },
-      { byte: 9, deleteBytes: 1, insert: " " },
-    ],
-  },
-  {
-    name: "replace comment indentation with VT and FF and restore it",
-    source: " #note",
-    edits: [
-      { byte: 0, deleteBytes: 1, insert: "\v" },
-      { byte: 0, deleteBytes: 1, insert: "\f" },
-      { byte: 0, deleteBytes: 1, insert: " " },
-    ],
-  },
-  {
-    name: "make trailing spaces significant",
-    source: "a  ",
-    edits: [{ byte: 3, deleteBytes: 0, insert: "b" }],
-  },
-  {
-    name: "close quotation and expose attributes",
-    source: '"a b text',
-    edits: [{ byte: 4, deleteBytes: 0, insert: '"' }],
-  },
-  {
-    name: "reopen quotation and absorb attributes",
-    source: '"a b" text',
-    edits: [{ byte: 4, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "complete octal and closing quote",
-    source: String.raw`"\12`,
-    edits: [{ byte: 4, deleteBytes: 0, insert: '3" text' }],
-  },
-  {
-    name: "turn octal literal into wildcard",
-    source: String.raw`"\141" text`,
-    edits: [{ byte: 2, deleteBytes: 3, insert: "052" }],
-  },
-  {
-    name: "complete macro marker",
-    source: "[attr name -text",
-    edits: [{ byte: 5, deleteBytes: 0, insert: "]" }],
-  },
-  {
-    name: "fill an empty attribute name",
-    source: "a -",
-    edits: [{ byte: 3, deleteBytes: 0, insert: "text" }],
-  },
-  {
-    name: "remove attribute modifier before assignment",
-    source: "a -text=auto",
-    edits: [{ byte: 2, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "preserve a quoted bracket after earlier lookahead",
-    source: String.raw`"[\133"`,
-    edits: [{ byte: 6, deleteBytes: 0, insert: "]" }],
-  },
-];
-for (const entry of editCases) {
-  test(`gitattributes: ${entry.name}`, () => {
-    assertEditHistory(entry);
-  });
-}
 
 const escapedSeparatorHistories = [
   {

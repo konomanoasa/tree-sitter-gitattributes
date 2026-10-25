@@ -1,16 +1,4 @@
 ==================
-Glob escape before separator and at EOF
-==================
-a\ text
-b\
----
-
-(document
-  (attribute_rule pattern: (pattern (glob_literal) issue: (syntax_issue (invalid_syntax (incomplete_escape))))
-    (attribute name: (attribute_name (name_text))) (line_ending))
-  (attribute_rule pattern: (pattern (glob_literal) issue: (syntax_issue (incomplete_syntax (incomplete_escape))))))
-
-==================
 Literal brace syntax
 :cst
 ==================
@@ -42,6 +30,21 @@ Escaped special markers
 0:8  - 0:10         escape `\\[`
 
 ==================
+VT and FF inside an unquoted pattern remain literal
+:cst
+==================
+abc text
+---
+
+0:0  - 0:10   document
+0:0  - 0:10     attribute_rule
+0:0  - 0:5        pattern: pattern
+0:0  - 0:5          glob_literal `a\vb\fc`
+0:6  - 0:10       attribute
+0:6  - 0:10         name: attribute_name
+0:6  - 0:10           name_text `text`
+
+==================
 Negative pattern
 :cst
 ==================
@@ -58,21 +61,6 @@ Negative pattern
 0:3 - 0:7       attribute
 0:3 - 0:7         name: attribute_name
 0:3 - 0:7           name_text `text`
-
-==================
-Incomplete glob escape
-:cst
-==================
-a\
----
-
-0:0 - 0:2   document
-0:0 - 0:2     attribute_rule
-0:0 - 0:2       pattern: pattern
-0:0 - 0:1         glob_literal `a`
-0:1 - 0:2         issue: syntax_issue
-0:1 - 0:2           incomplete_syntax
-0:1 - 0:2             incomplete_escape `\\`
 
 ==================
 Glob escape ended by separator
@@ -93,16 +81,28 @@ a\ text
 0:3 - 0:7           name_text `text`
 
 ==================
-VT and FF inside an unquoted pattern remain literal
-:cst
+Glob escape before separator and at EOF
 ==================
-abc text
+a\ text
+b\
 ---
 
-0:0  - 0:10   document
-0:0  - 0:10     attribute_rule
-0:0  - 0:5        pattern: pattern
-0:0  - 0:5          glob_literal `a\vb\fc`
-0:6  - 0:10       attribute
-0:6  - 0:10         name: attribute_name
-0:6  - 0:10           name_text `text`
+(document
+  (attribute_rule pattern: (pattern (glob_literal) issue: (syntax_issue (invalid_syntax (incomplete_escape))))
+    (attribute name: (attribute_name (name_text))) (line_ending))
+  (attribute_rule pattern: (pattern (glob_literal) issue: (syntax_issue (incomplete_syntax (incomplete_escape))))))
+
+==================
+Incomplete glob escape
+:cst
+==================
+a\
+---
+
+0:0 - 0:2   document
+0:0 - 0:2     attribute_rule
+0:0 - 0:2       pattern: pattern
+0:0 - 0:1         glob_literal `a`
+0:1 - 0:2         issue: syntax_issue
+0:1 - 0:2           incomplete_syntax
+0:1 - 0:2             incomplete_escape `\\`
