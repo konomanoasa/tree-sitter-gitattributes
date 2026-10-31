@@ -37,7 +37,6 @@ enum Token {
   PATH_SEPARATOR,
   ESCAPE,
   QUOTED_ESCAPE,
-  ESCAPE_PREFIX,
   SET_OPEN,
   SET_NEGATION,
   SET_TEXT,
@@ -50,23 +49,6 @@ enum Token {
   CLASS_OPEN,
   CLASS_NAME,
   CLASS_CLOSE,
-  MISSING_SET_CLOSE,
-  INCOMPLETE_SET_CLOSE,
-  INVALID_ENCODING,
-  NEGATIVE_PATTERN,
-  ENDED_ESCAPE,
-  INCOMPLETE_ESCAPE,
-  INVALID_QUOTED_ESCAPE,
-  ENDED_QUOTED_ESCAPE,
-  INCOMPLETE_QUOTED_ESCAPE,
-  MISSING_QUOTE_CLOSE,
-  INCOMPLETE_QUOTE_CLOSE,
-  MISSING_ATTRIBUTE_SEPARATOR,
-  MISSING_ATTRIBUTE_NAME,
-  INCOMPLETE_ATTRIBUTE_NAME,
-  INVALID_NAME_CHARACTER,
-  INCOMPLETE_NAME_CHARACTER,
-  INVALID_NAME_ESCAPE,
   ERROR_SENTINEL
 };
 
@@ -87,10 +69,10 @@ typedef struct {
 typedef struct {
   uint32_t position, leading, line_end, content_end;
   uint32_t token_end, name_start, name_end;
-  uint32_t next_end, prefix_end, set_end, set_close_end;
+  uint32_t next_end, set_end, set_close_end;
   Class class;
   uint32_t lower_end, range_operator_end, upper_end;
-  uint8_t kind, next, prefix_kind, lower_kind, upper_kind;
+  uint8_t kind, next, lower_kind, upper_kind;
   uint8_t quoted, component_start, after_separator;
 } Scanner;
 
@@ -108,16 +90,6 @@ static bool whitespace(int32_t c) {
   return c == ' ' || c == '\t' || c == '\r';
 }
 
-static bool alphanumeric(int32_t c) {
-  return (c >= 'a' && c <= 'z') ||
-    (c >= 'A' && c <= 'Z') ||
-    (c >= '0' && c <= '9');
-}
-
-static bool name_character(int32_t c, bool first) {
-  return alphanumeric(c) || c == '_' || c == '.' || (!first && c == '-');
-}
-
 static void advance(Scanner *s, TSLexer *lexer) {
   lexer->advance(lexer, false);
   s->position++;
@@ -129,20 +101,6 @@ static bool emit(TSLexer *lexer, const bool *valid, enum Token token) {
   return true;
 }
 
-static enum Token
-absent(TSLexer *lexer, enum Token missing, enum Token incomplete) {
-  return lexer->eof(lexer) ? incomplete : missing;
-}
-
-// Include the next decoded character so edits invalidate the run.
-static bool invalid_run(Scanner *s, TSLexer *lexer, const bool *valid) {
-  do advance(s, lexer);
-  while (!lexer->eof(lexer) && lexer->lookahead == DECODE_ERROR);
-  lexer->mark_end(lexer);
-  if (!lexer->eof(lexer)) lexer->advance(lexer, false);
-  return emit(lexer, valid, INVALID_ENCODING);
-}
-
 static bool consume(
   Scanner *s,
   TSLexer *lexer,
@@ -150,8 +108,16 @@ static bool consume(
   enum Token token,
   uint32_t end
 ) {
-  if (token == INVALID_ENCODING) return invalid_run(s, lexer, valid);
-  while (s->position < end) advance(s, lexer);
+  if (!valid[token]) return false;
+  while (s->position < end) {
+    if (
+      lexer->eof(lexer) ||
+      lexer->lookahead == '\n' ||
+      lexer->lookahead == DECODE_ERROR
+    )
+      return false;
+    advance(s, lexer);
+  }
   lexer->mark_end(lexer);
   return emit(lexer, valid, token);
 }
@@ -168,8 +134,13 @@ static bool text_run(
   enum Token token,
   uint32_t end
 ) {
-  if (lexer->lookahead == DECODE_ERROR) return invalid_run(s, lexer, valid);
-  while (s->position < end && lexer->lookahead != DECODE_ERROR)
+  if (lexer->lookahead == DECODE_ERROR) return false;
+  while (
+    s->position < end &&
+    !lexer->eof(lexer) &&
+    lexer->lookahead != '\n' &&
+    lexer->lookahead != DECODE_ERROR
+  )
     advance(s, lexer);
   lexer->mark_end(lexer);
   return emit(lexer, valid, token);
@@ -207,12 +178,9 @@ static int32_t simple_escape(int32_t c) {
 static void quoted_escape(Cursor *r) {
   const int32_t c = r->lexer->lookahead;
   r->kind = QUOTED_ESCAPE;
-  if (r->raw >= r->limit) {
+  if (r->raw >= r->limit || c == DECODE_ERROR) {
     r->c = INVALID_UNIT;
-    r->kind = absent(r->lexer, ENDED_QUOTED_ESCAPE, INCOMPLETE_QUOTED_ESCAPE);
-  } else if (c == DECODE_ERROR) {
-    r->c = INVALID_UNIT;
-    r->kind = ESCAPE_PREFIX;
+    r->kind = ERROR_SENTINEL;
   } else if (c >= '0' && c <= '3') {
     int32_t value = 0;
     unsigned digits = 0;
@@ -226,14 +194,12 @@ static void quoted_escape(Cursor *r) {
     if (digits == 3) r->c = value;
     else {
       r->c = INVALID_UNIT;
-      r->kind = r->raw == r->limit
-        ? absent(r->lexer, ENDED_QUOTED_ESCAPE, INCOMPLETE_QUOTED_ESCAPE)
-        : ENDED_QUOTED_ESCAPE;
+      r->kind = ERROR_SENTINEL;
     }
   } else {
     raw_step(r);
     r->c = simple_escape(c);
-    if (r->c == INVALID_UNIT) r->kind = INVALID_QUOTED_ESCAPE;
+    if (r->c == INVALID_UNIT) r->kind = ERROR_SENTINEL;
   }
 }
 
@@ -246,7 +212,7 @@ static void step(Cursor *r) {
   raw_step(r);
   r->c = c;
   if (c == DECODE_ERROR) {
-    r->kind = INVALID_ENCODING;
+    r->kind = ERROR_SENTINEL;
     while (r->raw < r->limit && r->lexer->lookahead == DECODE_ERROR)
       raw_step(r);
   } else if (r->s->quoted && r->start < r->s->content_end && c == '\\')
@@ -403,9 +369,7 @@ static Item item(Cursor *r) {
   if (r->kind) a.kind = r->kind;
   step(r);
   if (c == '\\') {
-    if (r->c == CURSOR_END)
-      a.kind = absent(r->lexer, ENDED_ESCAPE, INCOMPLETE_ESCAPE);
-    else if (r->c < 0) a.kind = ESCAPE_PREFIX;
+    if (r->c < 0) a.kind = ERROR_SENTINEL;
     else {
       a.kind = ESCAPE;
       a.end = r->end;
@@ -427,36 +391,18 @@ static bool literal_boundary(const Cursor *r) {
   return c == '\\' || c == '*' || c == '?' || c == '/' || c == '[';
 }
 
-static void hold_prefix(Scanner *s, Cursor *r, uint32_t prefix_end) {
-  s->next = ESCAPE_PREFIX;
-  s->prefix_end = prefix_end;
-  s->prefix_kind = r->kind;
-  if (r->kind == ESCAPE_PREFIX) {
-    s->prefix_end = r->end;
-    s->prefix_kind = INVALID_ENCODING;
-    step(r);
-  }
-  s->next_end = r->end;
-}
-
 // Consume lookahead units fully so edits inside them invalidate the decision.
 static bool prepare_glob(Scanner *s, TSLexer *lexer, const bool *valid) {
   Cursor r = cursor(s, lexer, s->content_end);
   bool separator = r.c == '/';
   const uint32_t start = s->position;
   s->next_end = r.end;
-  if (r.c < 0) {
-    if (r.kind == ESCAPE_PREFIX) hold_prefix(s, &r, r.end);
-    else s->next = r.kind;
-  } else if (r.c == '!' && start == content_start(s))
-    s->next = NEGATIVE_PATTERN;
+  if (r.c < 0 || (r.c == '!' && start == content_start(s))) return false;
   else if (r.c == '?') s->next = SINGLE_CHARACTER;
   else if (r.c == '/') s->next = PATH_SEPARATOR;
   else if (r.c == '\\') {
     step(&r);
-    if (r.c == CURSOR_END)
-      s->next = absent(lexer, ENDED_ESCAPE, INCOMPLETE_ESCAPE);
-    else if (r.c < 0) hold_prefix(s, &r, s->next_end);
+    if (r.c < 0) return false;
     else {
       s->next = ESCAPE;
       s->next_end = r.end;
@@ -492,7 +438,7 @@ static bool prepare_glob(Scanner *s, TSLexer *lexer, const bool *valid) {
     s->component_start = false;
     return emit(lexer, valid, LITERAL);
   }
-  s->component_start = separator || s->next == NEGATIVE_PATTERN;
+  s->component_start = separator;
   if (separator) s->after_separator = true;
   return emit(lexer, valid, GLOB_START);
 }
@@ -539,7 +485,6 @@ static bool prepare_set(Scanner *s, TSLexer *lexer, const bool *valid) {
       if (s->next_end == start) {
         s->next = current.kind;
         s->next_end = current.end;
-        if (current.kind == ESCAPE_PREFIX) hold_prefix(s, &r, current.end);
       }
       break;
     }
@@ -574,7 +519,7 @@ static bool class_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
     if (!next_class(&r, false, &s->class)) s->class.start = NONE;
     return emit(lexer, valid, COMPOUND_CLOSE);
   }
-  if (lexer->lookahead == DECODE_ERROR) return invalid_run(s, lexer, valid);
+  if (lexer->lookahead == DECODE_ERROR) return false;
   Cursor r = cursor(s, lexer, s->class.closing_start);
   const enum Token token = r.kind ? (enum Token)r.kind : CLASS_NAME;
   uint32_t end = r.end;
@@ -605,26 +550,20 @@ static bool range_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
   );
 }
 
-static enum Token name_token(const Cursor *r, bool first) {
-  if (r->c < 0) return (enum Token)r->kind;
-  if (!r->kind && r->c == '\r' && r->lexer->eof(r->lexer))
-    return INCOMPLETE_NAME_CHARACTER;
-  if (!name_character(r->c, first))
-    return r->kind == QUOTED_ESCAPE ? INVALID_NAME_ESCAPE
-                                    : INVALID_NAME_CHARACTER;
+static enum Token name_token(const Cursor *r) {
+  if (r->c < 0) return ERROR_SENTINEL;
   return r->kind == QUOTED_ESCAPE ? QUOTED_ESCAPE : NAME_TEXT;
 }
 
 static bool name_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
-  if (lexer->lookahead == DECODE_ERROR) return invalid_run(s, lexer, valid);
+  if (lexer->lookahead == DECODE_ERROR) return false;
   Cursor r = cursor(s, lexer, s->name_end);
-  if (r.kind == ESCAPE_PREFIX) s->next = INVALID_ENCODING;
-  const enum Token token = name_token(&r, s->position == s->name_start);
+  const enum Token token = name_token(&r);
   uint32_t end = r.end;
   lexer->mark_end(lexer);
-  if (token == NAME_TEXT || token == INVALID_NAME_CHARACTER) {
+  if (token == NAME_TEXT) {
     step(&r);
-    while (name_token(&r, false) == token) {
+    while (name_token(&r) == token) {
       end = r.end;
       lexer->mark_end(lexer);
       step(&r);
@@ -660,19 +599,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
     return start_content(s, lexer, valid);
   lexer->mark_end(lexer);
   if (
-    (valid[SET_CLOSE] ||
-      valid[MISSING_SET_CLOSE] ||
-      valid[INCOMPLETE_SET_CLOSE]) &&
-    s->position == s->set_end
-  ) {
-    if (s->set_close_end > s->set_end)
-      return consume(s, lexer, valid, SET_CLOSE, s->set_close_end);
-    return emit(
-      lexer,
-      valid,
-      absent(lexer, MISSING_SET_CLOSE, INCOMPLETE_SET_CLOSE)
-    );
-  }
+    valid[SET_CLOSE] &&
+    s->position == s->set_end &&
+    s->set_close_end > s->set_end
+  )
+    return consume(s, lexer, valid, SET_CLOSE, s->set_close_end);
   if (valid[ATTRIBUTE_START]) return prepare_attribute(s, lexer, valid);
   if (valid[ATTRIBUTE_END] && s->position == s->token_end)
     return emit(lexer, valid, ATTRIBUTE_END);
@@ -685,12 +616,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
     return emit(lexer, valid, VALUE_START);
   if (valid[VALUE_END] && s->position == s->token_end)
     return emit(lexer, valid, VALUE_END);
-  if (valid[MISSING_ATTRIBUTE_NAME] && s->position == s->name_end)
-    return emit(
-      lexer,
-      valid,
-      absent(lexer, MISSING_ATTRIBUTE_NAME, INCOMPLETE_ATTRIBUTE_NAME)
-    );
   if (
     (valid[UNSET_MARKER] || valid[UNSPECIFIED_MARKER]) &&
     s->position < s->name_start
@@ -707,17 +632,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
   if (valid[ASSIGNMENT_OPERATOR] && lexer->lookahead == '=')
     return take(s, lexer, valid, ASSIGNMENT_OPERATOR);
   if (
-    (valid[QUOTE_CLOSE] || valid[MISSING_QUOTE_CLOSE]) &&
+    valid[QUOTE_CLOSE] &&
     s->quoted &&
-    s->position == s->content_end
-  ) {
-    if (s->content_end < s->line_end) return take(s, lexer, valid, QUOTE_CLOSE);
-    return emit(
-      lexer,
-      valid,
-      absent(lexer, MISSING_QUOTE_CLOSE, INCOMPLETE_QUOTE_CLOSE)
-    );
-  }
+    s->position == s->content_end &&
+    s->content_end < s->line_end
+  )
+    return take(s, lexer, valid, QUOTE_CLOSE);
   if (valid[PATTERN_END] && s->position >= s->content_end)
     return emit(lexer, valid, PATTERN_END);
   if (s->position >= s->line_end)
@@ -731,15 +651,17 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
   if (valid[MACRO_MARKER])
     return consume(s, lexer, valid, MACRO_MARKER, s->name_start);
   if (valid[SEPARATOR] || valid[LAYOUT]) {
-    if (!whitespace(lexer->lookahead))
-      return emit(lexer, valid, MISSING_ATTRIBUTE_SEPARATOR);
+    if (!whitespace(lexer->lookahead)) return false;
     while (s->position < s->line_end && whitespace(lexer->lookahead))
       advance(s, lexer);
     lexer->mark_end(lexer);
     return emit(lexer, valid, s->position < s->line_end ? SEPARATOR : LAYOUT);
   }
-  if (valid[GLOB_START]) return prepare_glob(s, lexer, valid);
-  if (valid[SET_ITEM_START] || valid[SET_NEGATION])
+  if (valid[GLOB_START] && s->position < s->content_end)
+    return prepare_glob(s, lexer, valid);
+  if (
+    (valid[SET_ITEM_START] || valid[SET_NEGATION]) && s->position < s->set_end
+  )
     return prepare_set(s, lexer, valid);
   if (s->class.start < s->position && s->position < s->class.end)
     return class_piece(s, lexer, valid);
@@ -751,10 +673,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
   const enum Token token = (enum Token)s->next;
   if (token == CLASS_OPEN)
     return class_delimiter(s, lexer, valid, COMPOUND_OPEN);
-  if (token == ESCAPE_PREFIX) {
-    s->next = s->prefix_kind;
-    return consume(s, lexer, valid, token, s->prefix_end);
-  }
   return consume(s, lexer, valid, token, s->next_end);
 }
 
@@ -770,6 +688,7 @@ unsigned tree_sitter_gitattributes_external_scanner_serialize(
   void *payload,
   char *buffer
 ) {
+  if (payload == NULL) return 0;
   memcpy(buffer, payload, sizeof(Scanner));
   return sizeof(Scanner);
 }
@@ -779,6 +698,7 @@ void tree_sitter_gitattributes_external_scanner_deserialize(
   const char *buffer,
   unsigned length
 ) {
+  if (payload == NULL) return;
   memset(payload, 0, sizeof(Scanner));
   if (length == sizeof(Scanner)) memcpy(payload, buffer, length);
 }
@@ -788,6 +708,7 @@ bool tree_sitter_gitattributes_external_scanner_scan(
   TSLexer *lexer,
   const bool *valid
 ) {
+  if (payload == NULL) return false;
   Scanner next = *(Scanner *)payload;
   if (!scan(&next, lexer, valid)) return false;
   *(Scanner *)payload = next;

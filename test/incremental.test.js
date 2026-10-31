@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   applyEdits,
   assertEditHistory,
-  assertIncrementalEqualsFresh,
+  assertEditMatchesContract,
   parse,
 } from "./support/parser.js";
 
@@ -54,7 +54,7 @@ const editCases = [
     edits: [{ byte: 9, deleteBytes: 1, insert: "]" }],
   },
   {
-    name: "remove a quoted macro closing quote and retain its name owner",
+    name: "remove and restore a quoted macro closing quote",
     source: '"[attr]foo" text',
     edits: [{ byte: 10, deleteBytes: 1, insert: "" }],
   },
@@ -140,7 +140,7 @@ const editCases = [
     ],
   },
   {
-    name: "change a valid name escape to an invalid name character and back",
+    name: "replace a letter escape with encoded punctuation and restore it",
     source: String.raw`"[attr]a\141b" text`,
     edits: [
       { byte: 9, deleteBytes: 3, insert: "044" },
@@ -239,37 +239,6 @@ for (const entry of editCases) {
   });
 }
 
-for (const [owner, prefix, suffix] of [
-  ["pattern", "a", "b text"],
-  ["name", "a na", "me"],
-  ["value", "a key=", "x"],
-  ["comment", "# a", "b"],
-  ["class", "[[:di", ":]] text"],
-]) {
-  for (const bom of ["", "\uFEFF"]) {
-    test(`gitattributes: splitting the character after a decoding failure merges the issue in ${owner}${bom && " after a BOM"}`, () => {
-      const offset = Buffer.byteLength(bom + prefix);
-      const source = Buffer.concat([
-        Buffer.from(bom + prefix),
-        Buffer.from([255]),
-        Buffer.from(`é${suffix}`),
-      ]);
-      const edits = [{ byte: offset + 2, deleteBytes: 1, insert: "" }];
-      const incremental = assertIncrementalEqualsFresh(
-        source,
-        edits,
-        applyEdits(source, edits),
-      );
-      assert.deepEqual(
-        incremental
-          .filter(({ kind }) => kind === "syntax_issue")
-          .map(({ start, end }) => [start, end]),
-        [[offset, offset + 2]],
-      );
-    });
-  }
-}
-
 test("gitattributes: replacing and restoring an octal byte preserves incremental parsing", () => {
   const source = String.raw`"[\303\251-z]"`;
   const original = parse(source);
@@ -279,7 +248,7 @@ test("gitattributes: replacing and restoring an octal byte preserves incremental
   assert.deepEqual(parse(source, edits), original);
 });
 
-test("gitattributes: fixed-seed generated histories preserve source structure and issue ranges", () => {
+test("gitattributes: fixed-seed generated histories preserve full fresh determinism and normal source equivalence", () => {
   const seed = 0x731dac9;
   const historyCount = 120;
   const editsPerHistory = 4;
@@ -315,7 +284,7 @@ test("gitattributes: fixed-seed generated histories preserve source structure an
       };
       edits.push(edit);
       bytes = applyEdits(bytes, [edit]);
-      assertIncrementalEqualsFresh(source, edits, bytes);
+      assertEditMatchesContract(source, edits, bytes);
     }
   }
 });

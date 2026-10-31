@@ -221,7 +221,7 @@ static void test_restored_comment_state_preserves_token_ranges(void) {
 
 static void test_restored_glob_state_preserves_token_ranges(void) {
   const int32_t input[] =
-    {'[', '^', 'a', ']', '[', '[', ':', 'd', ':', ']', ']', '['};
+    {'[', '^', 'a', ']', '[', '[', ':', 'd', ':', ']', ']'};
   const size_t length = sizeof(input) / sizeof(input[0]);
   const struct TokenCase cases[] = {
     {LINE_START, 0, 0},
@@ -241,11 +241,8 @@ static void test_restored_glob_state_preserves_token_ranges(void) {
     {CLASS_CLOSE, 8, 9},
     {COMPOUND_CLOSE, 9, 10},
     {SET_CLOSE, 10, 11},
-    {GLOB_START, 11, 11},
-    {SET_OPEN, 11, 12},
-    {INCOMPLETE_SET_CLOSE, 12, 12},
-    {PATTERN_END, 12, 12},
-    {END_OF_FILE, 12, 12},
+    {PATTERN_END, 11, 11},
+    {END_OF_FILE, 11, 11},
   };
   const Scanner scanner = scan_restored_tokens(
     input,
@@ -254,7 +251,23 @@ static void test_restored_glob_state_preserves_token_ranges(void) {
     sizeof(cases) / sizeof(cases[0])
   );
   assert(scanner.position == length);
-  assert(scanner.set_end == length && scanner.set_close_end == length);
+  assert(scanner.set_end == length - 1 && scanner.set_close_end == length);
+}
+
+static void test_absent_scanner_is_safe(void) {
+  char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE];
+  assert(
+    tree_sitter_gitattributes_external_scanner_serialize(NULL, buffer) == 0
+  );
+  tree_sitter_gitattributes_external_scanner_deserialize(NULL, NULL, 0);
+  bool valid[ERROR_SENTINEL + 1] = {false};
+  valid[LINE_START] = true;
+  struct MockLexer mock;
+  init_mock_lexer(&mock, NULL, 0);
+  assert(
+    !tree_sitter_gitattributes_external_scanner_scan(NULL, &mock.lexer, valid)
+  );
+  tree_sitter_gitattributes_external_scanner_destroy(NULL);
 }
 
 #ifdef TREE_SITTER_REUSE_ALLOCATOR
@@ -273,6 +286,7 @@ static void test_reuse_allocator_failure_and_cleanup(void) {
 
 int main(void) {
   test_internal_lexer_accepts_eof_only_at_input_end();
+  test_absent_scanner_is_safe();
   test_lifecycle_and_serialization_round_trip();
   test_disabled_and_recovery_scans_preserve_state();
   test_restored_comment_state_preserves_token_ranges();

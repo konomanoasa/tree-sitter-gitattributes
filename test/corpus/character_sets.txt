@@ -728,327 +728,114 @@ Octal range endpoints retain individual source escapes
 
 ==================
 Unquoted separator ends an unclosed set before EOF
-:cst
+:error
 ==================
 [abc  
 ---
 
-0:0 - 0:6   document
-0:0 - 0:6     attribute_rule
-0:0 - 0:4       pattern: pattern
-0:0 - 0:4         character_set
-0:0 - 0:1           opening: set_open `[`
-0:1 - 0:4           set_text `abc`
-0:4 - 0:4           issue: syntax_issue
-0:4 - 0:4             invalid_syntax
-0:4 - 0:4               missing_set_close
-
 ==================
-Invalid quoted escape stays inside a class name
-:cst
+Invalid quoted escape in a class name is rejected
+:error
 ==================
 "[[:a\q:]]"
 ---
 
-0:0  - 0:11   document
-0:0  - 0:11     attribute_rule
-0:0  - 0:11       pattern: pattern
-0:0  - 0:1          opening: quote_open `\"`
-0:1  - 0:10         character_set
-0:1  - 0:2            opening: set_open `[`
-0:2  - 0:9            character_class
-0:2  - 0:3              "["
-0:3  - 0:4              ":"
-0:4  - 0:5              name: class_name `a`
-0:5  - 0:7              issue: syntax_issue
-0:5  - 0:7                invalid_syntax
-0:5  - 0:7                  invalid_quoted_escape `\\q`
-0:7  - 0:8              ":"
-0:8  - 0:9              "]"
-0:9  - 0:10           closing: set_close `]`
-0:10 - 0:11         closing: quote_close `\"`
-
 ==================
-Short octal escape stays inside a class name
-:cst
+Short octal escape in a class name is rejected
+:error
 ==================
 "[[:a\12:]]"
 ---
 
-0:0  - 0:12   document
-0:0  - 0:12     attribute_rule
-0:0  - 0:12       pattern: pattern
-0:0  - 0:1          opening: quote_open `\"`
-0:1  - 0:11         character_set
-0:1  - 0:2            opening: set_open `[`
-0:2  - 0:10           character_class
-0:2  - 0:3              "["
-0:3  - 0:4              ":"
-0:4  - 0:5              name: class_name `a`
-0:5  - 0:8              issue: syntax_issue
-0:5  - 0:8                invalid_syntax
-0:5  - 0:8                  incomplete_quoted_escape `\\12`
-0:8  - 0:9              ":"
-0:9  - 0:10             "]"
-0:10 - 0:11           closing: set_close `]`
-0:11 - 0:12         closing: quote_close `\"`
-
 ==================
 Class closing bracket does not also close its set
-:cst
+:error
 ==================
 a[:[:[:]
 
 ---
 
-0:0 - 1:0   document
-0:0 - 1:0     attribute_rule
-0:0 - 0:8       pattern: pattern
-0:0 - 0:1         glob_literal `a`
-0:1 - 0:8         character_set
-0:1 - 0:2           opening: set_open `[`
-0:2 - 0:3           set_text `:`
-0:3 - 0:8           character_class
-0:3 - 0:4             "["
-0:4 - 0:5             ":"
-0:5 - 0:6             name: class_name `[`
-0:6 - 0:7             ":"
-0:7 - 0:8             "]"
-0:8 - 0:8           issue: syntax_issue
-0:8 - 0:8             invalid_syntax
-0:8 - 0:8               missing_set_close
-0:8 - 1:0       line_ending
-0:8 - 0:9         `\n`
-
 ==================
 Unfinished set before attributes
-:cst
+:error
 ==================
 [abc text
 ---
 
-0:0 - 0:9   document
-0:0 - 0:9     attribute_rule
-0:0 - 0:4       pattern: pattern
-0:0 - 0:4         character_set
-0:0 - 0:1           opening: set_open `[`
-0:1 - 0:4           set_text `abc`
-0:4 - 0:4           issue: syntax_issue
-0:4 - 0:4             invalid_syntax
-0:4 - 0:4               missing_set_close
-0:5 - 0:9       attribute
-0:5 - 0:9         name: attribute_name
-0:5 - 0:9           name_text `text`
-
 ==================
 Unfinished macro marker is an incomplete set
-:cst
+:error
 ==================
 [attr text
 ---
 
-0:0  - 0:10   document
-0:0  - 0:10     attribute_rule
-0:0  - 0:5        pattern: pattern
-0:0  - 0:5          character_set
-0:0  - 0:1            opening: set_open `[`
-0:1  - 0:5            set_text `attr`
-0:5  - 0:5            issue: syntax_issue
-0:5  - 0:5              invalid_syntax
-0:5  - 0:5                missing_set_close
-0:6  - 0:10       attribute
-0:6  - 0:10         name: attribute_name
-0:6  - 0:10           name_text `text`
-
 ==================
-Quoted octal opening bracket retains a missing close
-:cst
+Encoded opening bracket requires a set close
+:error
 ==================
 "\133abc"
 ---
 
-0:0 - 0:9   document
-0:0 - 0:9     attribute_rule
-0:0 - 0:9       pattern: pattern
-0:0 - 0:1         opening: quote_open `\"`
-0:1 - 0:8         character_set
-0:1 - 0:5           opening: set_open `\\133`
-0:5 - 0:8           set_text `abc`
-0:8 - 0:8           issue: syntax_issue
-0:8 - 0:8             invalid_syntax
-0:8 - 0:8               missing_set_close
-0:8 - 0:9         closing: quote_close `\"`
-
 ==================
 Unclosed set at line end
-:cst
+:error
 ==================
 [abc
 next
 ---
 
-0:0 - 1:4   document
-0:0 - 1:0     attribute_rule
-0:0 - 0:4       pattern: pattern
-0:0 - 0:4         character_set
-0:0 - 0:1           opening: set_open `[`
-0:1 - 0:4           set_text `abc`
-0:4 - 0:4           issue: syntax_issue
-0:4 - 0:4             invalid_syntax
-0:4 - 0:4               missing_set_close
-0:4 - 1:0       line_ending
-0:4 - 0:5         `\n`
-1:0 - 1:4     attribute_rule
-1:0 - 1:4       pattern: pattern
-1:0 - 1:4         glob_literal `next`
-
 ==================
-Quoted bracket remains an escape inside an incomplete set
-:cst
+Encoded bracket inside an unclosed set is rejected
+:error
 ==================
 "[\133"
 ---
 
-0:0 - 0:7   document
-0:0 - 0:7     attribute_rule
-0:0 - 0:7       pattern: pattern
-0:0 - 0:1         opening: quote_open `\"`
-0:1 - 0:6         character_set
-0:1 - 0:2           opening: set_open `[`
-0:2 - 0:6           quoted_escape `\\133`
-0:6 - 0:6           issue: syntax_issue
-0:6 - 0:6             invalid_syntax
-0:6 - 0:6               missing_set_close
-0:6 - 0:7         closing: quote_close `\"`
-
 ==================
-Unclosed set retains literal braces and set text
+Unclosed set after literal braces is rejected
+:error
 ==================
 {a,b}[abc*
 ---
 
-(document
-  (attribute_rule
-    pattern: (pattern
-      (glob_literal)
-      (character_set
-        opening: (set_open)
-        (set_text)
-        issue: (syntax_issue
-          (incomplete_syntax
-            (missing_set_close)))))))
-
 ==================
-Classes inside an incomplete outer set preserve their owners
+Complete classes do not complete an unclosed outer set
+:error
 ==================
 [[:x:][[:y:][
 ---
 
-(document
-  (attribute_rule
-    pattern: (pattern
-      (character_set
-        opening: (set_open)
-        (character_class
-          name: (class_name))
-        (set_text)
-        (character_class
-          name: (class_name))
-        (set_text)
-        issue: (syntax_issue
-          (incomplete_syntax
-            (missing_set_close)))))))
-
 ==================
 Empty class does not close its outer set
-:cst
+:error
 ==================
 [[::]
 ---
 
-0:0 - 0:5   document
-0:0 - 0:5     attribute_rule
-0:0 - 0:5       pattern: pattern
-0:0 - 0:5         character_set
-0:0 - 0:1           opening: set_open `[`
-0:1 - 0:5           character_class
-0:1 - 0:2             "["
-0:2 - 0:3             ":"
-0:3 - 0:4             ":"
-0:4 - 0:5             "]"
-0:5 - 0:5           issue: syntax_issue
-0:5 - 0:5             incomplete_syntax
-0:5 - 0:5               missing_set_close
-
 ==================
 Unclosed set at EOF
-:cst
+:error
 ==================
 x[abc
 ---
 
-0:0 - 0:5   document
-0:0 - 0:5     attribute_rule
-0:0 - 0:5       pattern: pattern
-0:0 - 0:1         glob_literal `x`
-0:1 - 0:5         character_set
-0:1 - 0:2           opening: set_open `[`
-0:2 - 0:5           set_text `abc`
-0:5 - 0:5           issue: syntax_issue
-0:5 - 0:5             incomplete_syntax
-0:5 - 0:5               missing_set_close
-
 ==================
 Leading close remains a member of an incomplete set
-:cst
+:error
 ==================
 []
 ---
 
-0:0 - 0:2   document
-0:0 - 0:2     attribute_rule
-0:0 - 0:2       pattern: pattern
-0:0 - 0:2         character_set
-0:0 - 0:1           opening: set_open `[`
-0:1 - 0:2           set_text `]`
-0:2 - 0:2           issue: syntax_issue
-0:2 - 0:2             incomplete_syntax
-0:2 - 0:2               missing_set_close
-
 ==================
-Wildcards inside an incomplete set remain set text
-:cst
+Unclosed set containing wildcard characters is rejected
+:error
 ==================
 x[a*?
 ---
 
-0:0 - 0:5   document
-0:0 - 0:5     attribute_rule
-0:0 - 0:5       pattern: pattern
-0:0 - 0:1         glob_literal `x`
-0:1 - 0:5         character_set
-0:1 - 0:2           opening: set_open `[`
-0:2 - 0:5           set_text `a*?`
-0:5 - 0:5           issue: syntax_issue
-0:5 - 0:5             incomplete_syntax
-0:5 - 0:5               missing_set_close
-
 ==================
-Set and trailing escape are independently incomplete
-:cst
+Unclosed set with a trailing escape is rejected
+:error
 ==================
 [a\
 ---
-
-0:0 - 0:3   document
-0:0 - 0:3     attribute_rule
-0:0 - 0:3       pattern: pattern
-0:0 - 0:3         character_set
-0:0 - 0:1           opening: set_open `[`
-0:1 - 0:2           set_text `a`
-0:2 - 0:3           issue: syntax_issue
-0:2 - 0:3             incomplete_syntax
-0:2 - 0:3               incomplete_escape `\\`
-0:3 - 0:3           issue: syntax_issue
-0:3 - 0:3             incomplete_syntax
-0:3 - 0:3               missing_set_close

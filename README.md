@@ -26,10 +26,6 @@ npm test
 - [Git 2.55.0 gitattributes manual](https://git-scm.com/docs/gitattributes/2.55.0)
 - [Git 2.55.0 gitignore manual](https://git-scm.com/docs/gitignore/2.55.0)
 
-## Used By
-
-[gitfile-ts-mode](https://github.com/konomanoasa/gitfile-ts-mode)
-
 ## License
 
 [MIT](LICENSE)
