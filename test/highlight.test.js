@@ -275,7 +275,22 @@ const finalCaptureCases = [
     ],
   },
   { name: "comment", source: "# note", captures: [[0, 6, "comment"]] },
-
+  {
+    name: "invalid negation preserves glob highlighting",
+    source: "!**/foo?.[a-z]  ",
+    captures: [
+      [1, 3, "character.special"],
+      [3, 4, "punctuation.delimiter"],
+      [4, 7, "string.special.path"],
+      [7, 8, "character.special"],
+      [8, 9, "string.special.path"],
+      [9, 10, "punctuation.bracket"],
+      [10, 11, "string.special.path"],
+      [11, 12, "operator"],
+      [12, 13, "string.special.path"],
+      [13, 14, "punctuation.bracket"],
+    ],
+  },
   {
     name: "escape",
     source: "\\#a",
@@ -284,7 +299,27 @@ const finalCaptureCases = [
       [2, 3, "string.special.path"],
     ],
   },
-
+  {
+    name: "unfinished set preserves its opening bracket",
+    source: "[abc",
+    captures: [
+      [0, 1, "punctuation.bracket"],
+      [1, 4, "string.special.path"],
+    ],
+  },
+  {
+    name: "incomplete escape is uncolored",
+    source: "a\\",
+    captures: [[0, 1, "string.special.path"]],
+  },
+  {
+    name: "invalid escape preserves the next line",
+    source: "a\\\nb",
+    captures: [
+      [0, 1, "string.special.path"],
+      [3, 4, "string.special.path"],
+    ],
+  },
   {
     name: "character class",
     source: "[[:digit:]]",
@@ -354,7 +389,35 @@ finalCaptureCases.push(
       [8, 9, "string"],
     ],
   },
-
+  {
+    name: "incomplete quote keeps normal content colored",
+    source: '"a b',
+    captures: [
+      [0, 1, "string"],
+      [1, 4, "string.special.path"],
+    ],
+  },
+  {
+    name: "invalid quoted escape stays uncolored",
+    source: String.raw`"a\qb" text`,
+    captures: [
+      [0, 1, "string"],
+      [1, 2, "string.special.path"],
+      [4, 5, "string.special.path"],
+      [5, 6, "string"],
+      [7, 11, "attribute"],
+    ],
+  },
+  {
+    name: "missing separator does not widen its range",
+    source: '"a"text',
+    captures: [
+      [0, 1, "string"],
+      [1, 2, "string.special.path"],
+      [2, 3, "string"],
+      [3, 7, "attribute"],
+    ],
+  },
   {
     name: "modified assignment preserves the operator",
     source: "a -name=value",

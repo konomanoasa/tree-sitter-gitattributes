@@ -126,9 +126,7 @@ static void test_internal_lexer_accepts_eof_only_at_input_end(void) {
   for (size_t index = 0; index < sizeof(input) / sizeof(input[0]); index += 1) {
     struct MockLexer mock;
     init_mock_lexer(&mock, input + index, 1);
-    assert(ts_lex(&mock.lexer, 0) == (input[index] == '\n'));
-    if (input[index] == '\n')
-      assert(mock.lexer.result_symbol == sym_line_ending);
+    assert(!ts_lex(&mock.lexer, 0));
     assert(mock.lexer.result_symbol != ts_builtin_sym_end);
   }
   struct MockLexer mock;
@@ -209,6 +207,7 @@ static void test_restored_comment_state_preserves_token_ranges(void) {
     {COMMENT_START, 0, 0},
     {COMMENT_MARKER, 0, 1},
     {COMMENT_TEXT, 1, 3},
+    {LINE_ENDING, 3, 5},
   };
   const Scanner scanner = scan_restored_tokens(
     input,
@@ -216,12 +215,13 @@ static void test_restored_comment_state_preserves_token_ranges(void) {
     cases,
     sizeof(cases) / sizeof(cases[0])
   );
-  assert(scanner.position == 3);
+  const Scanner cleared = {0};
+  assert(memcmp(&scanner, &cleared, sizeof(scanner)) == 0);
 }
 
 static void test_restored_glob_state_preserves_token_ranges(void) {
   const int32_t input[] =
-    {'[', '^', 'a', ']', '[', '[', ':', 'd', ':', ']', ']'};
+    {'[', '^', 'a', ']', '[', '[', ':', 'd', ':', ']', ']', '['};
   const size_t length = sizeof(input) / sizeof(input[0]);
   const struct TokenCase cases[] = {
     {LINE_START, 0, 0},
@@ -241,8 +241,11 @@ static void test_restored_glob_state_preserves_token_ranges(void) {
     {CLASS_CLOSE, 8, 9},
     {COMPOUND_CLOSE, 9, 10},
     {SET_CLOSE, 10, 11},
-    {PATTERN_END, 11, 11},
-    {END_OF_FILE, 11, 11},
+    {GLOB_START, 11, 11},
+    {SET_OPEN, 11, 12},
+    {INCOMPLETE_SET_CLOSE, 12, 12},
+    {PATTERN_END, 12, 12},
+    {END_OF_FILE, 12, 12},
   };
   const Scanner scanner = scan_restored_tokens(
     input,
@@ -250,9 +253,23 @@ static void test_restored_glob_state_preserves_token_ranges(void) {
     cases,
     sizeof(cases) / sizeof(cases[0])
   );
-  assert(scanner.position == length);
-  assert(scanner.set_end == length - 1 && scanner.set_close_end == length);
+  const Scanner cleared = {0};
+  assert(memcmp(&scanner, &cleared, sizeof(scanner)) == 0);
 }
+
+#ifdef TREE_SITTER_REUSE_ALLOCATOR
+static void test_reuse_allocator_failure_and_cleanup(void) {
+  assert(reuse_live_allocations == 0);
+  reuse_fail_next_calloc = true;
+  assert(tree_sitter_gitattributes_external_scanner_create() == NULL);
+  assert(!reuse_fail_next_calloc);
+  void *scanner = tree_sitter_gitattributes_external_scanner_create();
+  assert(scanner != NULL);
+  assert(reuse_live_allocations == 1);
+  tree_sitter_gitattributes_external_scanner_destroy(scanner);
+  assert(reuse_live_allocations == 0);
+}
+#endif
 
 static void test_absent_scanner_is_safe(void) {
   char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE];
@@ -270,23 +287,52 @@ static void test_absent_scanner_is_safe(void) {
   tree_sitter_gitattributes_external_scanner_destroy(NULL);
 }
 
-#ifdef TREE_SITTER_REUSE_ALLOCATOR
-static void test_reuse_allocator_failure_and_cleanup(void) {
-  assert(reuse_live_allocations == 0);
-  reuse_fail_next_calloc = true;
-  assert(tree_sitter_gitattributes_external_scanner_create() == NULL);
-  assert(!reuse_fail_next_calloc);
-  void *scanner = tree_sitter_gitattributes_external_scanner_create();
-  assert(scanner != NULL);
-  assert(reuse_live_allocations == 1);
-  tree_sitter_gitattributes_external_scanner_destroy(scanner);
-  assert(reuse_live_allocations == 0);
+static void
+test_line_end_discards_state_after_missing_set_and_quote_close(void) {
+  const int32_t input[][5] =
+    {{'"', '[', 'a'}, {'"', '[', 'a', '\n'}, {'"', '[', 'a', '\r', '\n'}};
+  const size_t lengths[] = {3, 4, 5};
+  for (size_t i = 0; i < 3; i++) {
+    const struct TokenCase cases[] = {
+      {LINE_START, 0, 0},
+      {RULE_START, 0, 0},
+      {QUOTE_OPEN, 0, 1},
+      {GLOB_START, 1, 1},
+      {SET_OPEN, 1, 2},
+      {SET_ITEM_START, 2, 2},
+      {SET_TEXT, 2, 3},
+      {i == 0 ? INCOMPLETE_SET_CLOSE : MISSING_SET_CLOSE, 3, 3},
+      {i == 0 ? INCOMPLETE_QUOTE_CLOSE : MISSING_QUOTE_CLOSE, 3, 3},
+      {PATTERN_END, 3, 3},
+      {i == 0 ? END_OF_FILE : LINE_ENDING, 3, lengths[i]},
+    };
+    const Scanner scanner = scan_restored_tokens(
+      input[i],
+      lengths[i],
+      cases,
+      sizeof(cases) / sizeof(cases[0])
+    );
+    const Scanner cleared = {0};
+    assert(memcmp(&scanner, &cleared, sizeof(scanner)) == 0);
+  }
 }
-#endif
+
+static void test_blank_line_state_is_retained_until_line_ending(void) {
+  const int32_t input[] = {'\n'};
+  const struct TokenCase cases[] =
+    {{LINE_START, 0, 0}, {BLANK_START, 0, 0}, {LINE_ENDING, 0, 1}};
+  const Scanner started = scan_restored_tokens(input, 1, cases, 1);
+  assert(started.kind == BLANK_START);
+  const Scanner scanner = scan_restored_tokens(input, 1, cases, 3);
+  const Scanner cleared = {0};
+  assert(memcmp(&scanner, &cleared, sizeof(scanner)) == 0);
+}
 
 int main(void) {
-  test_internal_lexer_accepts_eof_only_at_input_end();
+  test_line_end_discards_state_after_missing_set_and_quote_close();
+  test_blank_line_state_is_retained_until_line_ending();
   test_absent_scanner_is_safe();
+  test_internal_lexer_accepts_eof_only_at_input_end();
   test_lifecycle_and_serialization_round_trip();
   test_disabled_and_recovery_scans_preserve_state();
   test_restored_comment_state_preserves_token_ranges();

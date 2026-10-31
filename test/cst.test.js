@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { root } from "../scripts/tree-sitter.js";
 import nodeTypes from "../src/node-types.json" with { type: "json" };
-import { hasError, leaves, parseCst } from "./support/cst.js";
+import { issues, leaves, owners, parseCst } from "./support/cst.js";
 import { parse } from "./support/parser.js";
 
 function parseCorpus(text) {
@@ -36,9 +36,9 @@ for (const file of readdirSync(corpusDirectory).sort()) {
     readFileSync(join(corpusDirectory, file), "utf8"),
   );
   for (const { name, source } of entries) {
-    test(`gitattributes: corpus normal source coverage and full fresh determinism: ${file}: ${name}`, () => {
+    test(`gitattributes: corpus source coverage issue structure and fresh determinism: ${file}: ${name}`, () => {
       const tree = parse(source);
-      if (!hasError(tree)) {
+      if (issues(tree).length === 0) {
         const bytes = Buffer.from(source);
         const parents = new Set(tree.map(({ parent }) => parent));
         const terminal = tree.filter((_, index) => !parents.has(index));
@@ -52,6 +52,9 @@ for (const file of readdirSync(corpusDirectory).sort()) {
           end = node.end;
         }
         assert.match(bytes.subarray(end).toString(), /^[ \t\r]*$/);
+      }
+      for (const node of tree.filter(({ kind }) => kind === "syntax_issue")) {
+        assert.equal(node.field, "issue");
       }
       assert.deepEqual(parse(source), tree);
     });
@@ -87,22 +90,35 @@ test("gitattributes: corpus input reader rejects unsupported conditions and fram
   }
 });
 
-test("gitattributes: public metadata requires normal structure without diagnostic nodes", () => {
-  for (const node of nodeTypes) {
-    assert.ok(!/issue|invalid|incomplete|missing/.test(node.type), node.type);
-    assert.ok(!node.fields || !("issue" in node.fields), node.type);
-  }
-  for (const [kind, fields] of Object.entries({
-    attribute_rule: ["pattern"],
-    macro_definition: ["marker", "name"],
-    attribute: ["name"],
-    character_set: ["opening", "closing"],
-    character_range: ["lower", "upper"],
-  })) {
-    const node = nodeTypes.find(({ type }) => type === kind);
-    assert.ok(node?.fields, kind);
-    for (const field of fields)
-      assert.equal(node.fields[field].required, true, `${kind}.${field}`);
+test("gitattributes: public issue nodes have one outcome and one reason", () => {
+  const issue = nodeTypes.find(({ type }) => type === "syntax_issue");
+  assert.ok(issue);
+  assert.ok(issue.children);
+  assert.equal(issue.children.required, true);
+  assert.equal(issue.children.multiple, false);
+  assert.deepEqual(
+    issue.children.types.map(({ type }) => type),
+    ["incomplete_syntax", "invalid_syntax"],
+  );
+  for (const { type } of issue.children.types) {
+    const outcome = nodeTypes.find((node) => node.type === type);
+    assert.ok(outcome, type);
+    assert.ok(outcome.children, type);
+    assert.equal(outcome.children.required, true);
+    assert.equal(outcome.children.multiple, false);
+    for (const child of outcome.children.types) {
+      const reason = nodeTypes.find((node) => node.type === child.type);
+      assert.ok(reason, child.type);
+      if (child.type === "invalid_name_character") {
+        assert.ok(reason.children);
+        assert.equal(reason.children.multiple, false);
+        assert.deepEqual(reason.children.types, [
+          { type: "quoted_escape", named: true },
+        ]);
+      } else {
+        assert.equal(reason.children, undefined);
+      }
+    }
   }
 });
 
@@ -113,48 +129,57 @@ test("gitattributes: compound delimiters are anonymous and have no opening or cl
   const node = nodeTypes.find(({ type }) => type === "character_class");
   assert.ok(node);
   assert.ok(node.fields);
-  assert.deepEqual(Object.keys(node.fields), ["name"]);
+  assert.deepEqual(Object.keys(node.fields), ["issue", "name"]);
 });
 
-for (const [context, prefix, suffix] of [
-  ["pattern", "a", "b"],
-  ["comment", "#a", "b"],
-  ["attribute name", "a n", "m"],
-  ["value", "a n=v", "x"],
-  ["glob escape", "\\", "b"],
-  ["C escape prefix", '"\\', 'b"'],
-  ["character set", "[a", "]"],
-  ["decoded glob escape", '"\\\\\\', '"'],
-  ["class name", "[[:d", ":]]"],
-  ["quoted macro escape", '"[attr]a\\', '"'],
-]) {
-  test(`gitattributes: invalid UTF-8 in ${context} is rejected deterministically`, () => {
-    const source = Buffer.concat([
-      Buffer.from(prefix),
-      Buffer.from([255, 254, 128]),
-      Buffer.from(suffix),
-    ]);
+const encodingCases = [
+  [
+    "consecutive decode failures within pattern",
+    Buffer.from([97, 255, 254, 128, 98]),
+    [["invalid_syntax", "invalid_encoding", 1, 4]],
+    ["pattern"],
+  ],
+  [
+    "consecutive decode failures within comment",
+    Buffer.from([35, 255, 254, 128, 98]),
+    [["invalid_syntax", "invalid_encoding", 1, 4]],
+    ["comment"],
+  ],
+  [
+    "consecutive decode failures within name",
+    Buffer.from([97, 32, 110, 255, 254, 128, 109]),
+    [["invalid_syntax", "invalid_encoding", 3, 6]],
+    ["attribute_name"],
+  ],
+  [
+    "consecutive decode failures within value",
+    Buffer.from([97, 32, 110, 61, 118, 255, 254, 128, 120]),
+    [["invalid_syntax", "invalid_encoding", 5, 8]],
+    ["attribute_value"],
+  ],
+];
+for (const [name, source, expected, expectedOwners] of encodingCases)
+  test(`gitattributes: ${name}`, () => {
     const tree = parse(source);
-    assert.ok(hasError(tree));
-    assert.deepEqual(parse(source), tree);
+    assert.deepEqual(issues(tree), expected);
+    assert.deepEqual(owners(tree), expectedOwners);
+    for (const node of tree.filter(({ kind }) => kind === "syntax_issue"))
+      assert.equal(node.field, "issue");
   });
-}
 
 const largeInputCounts = {
   lines: 10_000,
-  literalCharacters: 200_000,
 };
 const largeInputCases = [
   [
     "many independent lines",
     "**/node_modules/ -text\n".repeat(largeInputCounts.lines),
-    false,
+    0,
   ],
-  ["one long literal", "a".repeat(largeInputCounts.literalCharacters), false],
 ];
-for (const [name, source, expectedError] of largeInputCases)
+for (const [name, source, expectedIssues] of largeInputCases)
   test(`gitattributes: large input: ${name}`, () => {
-    assert.equal(hasError(parse(source)), expectedError);
+    assert.equal(issues(parse(source)).length, expectedIssues);
   });
 
 test("gitattributes: CST helpers preserve fields, anonymous nodes and UTF-8 ranges across CRLF", () => {
@@ -231,18 +256,10 @@ test("gitattributes: CST helpers preserve fields, anonymous nodes and UTF-8 rang
   ]);
 });
 
-test("gitattributes: CST helpers reject absent and truncated roots", () => {
-  assert.throws(() => parseCst("", "x"));
+test("gitattributes: CST helpers reject truncated roots and native recovery nodes", () => {
   assert.throws(() => parseCst("0:0 - 0:1   document", "é"));
-});
-
-test("gitattributes: CST helpers preserve root errors and missing leaves", () => {
-  assert.deepEqual(parseCst("0:0 - 0:1   ERROR", "x"), [
-    { kind: "ERROR", field: null, start: 0, end: 1, parent: null },
-  ]);
-  assert.ok(
-    hasError(
-      parseCst("0:0 - 0:1   document\n0:1 - 0:1     • quote_close", "x"),
-    ),
-  );
+  for (const kind of ["ERROR", "MISSING"]) {
+    const text = `0:0 - 0:1   document\n0:0 - 0:1     ${kind}`;
+    assert.throws(() => parseCst(text, "a"));
+  }
 });

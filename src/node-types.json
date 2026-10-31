@@ -3,6 +3,16 @@
     "type": "attribute",
     "named": true,
     "fields": {
+      "issue": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      },
       "modifier": {
         "multiple": false,
         "required": false,
@@ -19,7 +29,7 @@
       },
       "name": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "attribute_name",
@@ -52,10 +62,21 @@
   {
     "type": "attribute_name",
     "named": true,
-    "fields": {},
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
-      "required": true,
+      "required": false,
       "types": [
         {
           "type": "name_text",
@@ -72,6 +93,16 @@
     "type": "attribute_rule",
     "named": true,
     "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      },
       "pattern": {
         "multiple": false,
         "required": true,
@@ -101,10 +132,21 @@
   {
     "type": "attribute_value",
     "named": true,
-    "fields": {},
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
-      "multiple": false,
-      "required": true,
+      "multiple": true,
+      "required": false,
       "types": [
         {
           "type": "value_text",
@@ -132,6 +174,16 @@
     "type": "character_class",
     "named": true,
     "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": true,
         "required": false,
@@ -206,10 +258,20 @@
     "fields": {
       "closing": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "set_close",
+            "named": true
+          }
+        ]
+      },
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
             "named": true
           }
         ]
@@ -265,7 +327,18 @@
   {
     "type": "comment",
     "named": true,
-    "fields": {},
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": true,
@@ -319,6 +392,107 @@
     "fields": {}
   },
   {
+    "type": "incomplete_syntax",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "incomplete_escape",
+          "named": true
+        },
+        {
+          "type": "incomplete_quoted_escape",
+          "named": true
+        },
+        {
+          "type": "invalid_name_character",
+          "named": true
+        },
+        {
+          "type": "missing_attribute_name",
+          "named": true
+        },
+        {
+          "type": "missing_quote_close",
+          "named": true
+        },
+        {
+          "type": "missing_set_close",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "invalid_name_character",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "quoted_escape",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "invalid_syntax",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "incomplete_escape",
+          "named": true
+        },
+        {
+          "type": "incomplete_quoted_escape",
+          "named": true
+        },
+        {
+          "type": "invalid_encoding",
+          "named": true
+        },
+        {
+          "type": "invalid_name_character",
+          "named": true
+        },
+        {
+          "type": "invalid_quoted_escape",
+          "named": true
+        },
+        {
+          "type": "missing_attribute_name",
+          "named": true
+        },
+        {
+          "type": "missing_attribute_separator",
+          "named": true
+        },
+        {
+          "type": "missing_quote_close",
+          "named": true
+        },
+        {
+          "type": "missing_set_close",
+          "named": true
+        },
+        {
+          "type": "negative_pattern",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "macro_definition",
     "named": true,
     "fields": {
@@ -328,6 +502,16 @@
         "types": [
           {
             "type": "quote_close",
+            "named": true
+          }
+        ]
+      },
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
             "named": true
           }
         ]
@@ -344,7 +528,7 @@
       },
       "name": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "attribute_name",
@@ -388,6 +572,16 @@
         "types": [
           {
             "type": "quote_close",
+            "named": true
+          }
+        ]
+      },
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
             "named": true
           }
         ]
@@ -443,6 +637,25 @@
     }
   },
   {
+    "type": "syntax_issue",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "incomplete_syntax",
+          "named": true
+        },
+        {
+          "type": "invalid_syntax",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": ":",
     "named": false
   },
@@ -475,6 +688,22 @@
     "named": true
   },
   {
+    "type": "incomplete_escape",
+    "named": true
+  },
+  {
+    "type": "incomplete_quoted_escape",
+    "named": true
+  },
+  {
+    "type": "invalid_encoding",
+    "named": true
+  },
+  {
+    "type": "invalid_quoted_escape",
+    "named": true
+  },
+  {
     "type": "line_ending",
     "named": true
   },
@@ -483,7 +712,27 @@
     "named": true
   },
   {
+    "type": "missing_attribute_name",
+    "named": true
+  },
+  {
+    "type": "missing_attribute_separator",
+    "named": true
+  },
+  {
+    "type": "missing_quote_close",
+    "named": true
+  },
+  {
+    "type": "missing_set_close",
+    "named": true
+  },
+  {
     "type": "name_text",
+    "named": true
+  },
+  {
+    "type": "negative_pattern",
     "named": true
   },
   {

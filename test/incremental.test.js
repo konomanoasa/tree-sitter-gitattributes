@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   applyEdits,
   assertEditHistory,
-  assertEditMatchesContract,
+  assertIncrementalEqualsFresh,
   parse,
 } from "./support/parser.js";
 
@@ -54,7 +54,7 @@ const editCases = [
     edits: [{ byte: 9, deleteBytes: 1, insert: "]" }],
   },
   {
-    name: "remove and restore a quoted macro closing quote",
+    name: "remove a quoted macro closing quote and retain its name owner",
     source: '"[attr]foo" text',
     edits: [{ byte: 10, deleteBytes: 1, insert: "" }],
   },
@@ -140,7 +140,7 @@ const editCases = [
     ],
   },
   {
-    name: "replace a letter escape with encoded punctuation and restore it",
+    name: "change a valid name escape to an invalid name character and back",
     source: String.raw`"[attr]a\141b" text`,
     edits: [
       { byte: 9, deleteBytes: 3, insert: "044" },
@@ -239,6 +239,37 @@ for (const entry of editCases) {
   });
 }
 
+for (const [owner, prefix, suffix] of [
+  ["pattern", "a", "b text"],
+  ["name", "a na", "me"],
+  ["value", "a key=", "x"],
+  ["comment", "# a", "b"],
+  ["class", "[[:di", ":]] text"],
+]) {
+  for (const bom of ["", "\uFEFF"]) {
+    test(`gitattributes: splitting the character after a decoding failure merges the issue in ${owner}${bom && " after a BOM"}`, () => {
+      const offset = Buffer.byteLength(bom + prefix);
+      const source = Buffer.concat([
+        Buffer.from(bom + prefix),
+        Buffer.from([255]),
+        Buffer.from(`é${suffix}`),
+      ]);
+      const edits = [{ byte: offset + 2, deleteBytes: 1, insert: "" }];
+      const incremental = assertIncrementalEqualsFresh(
+        source,
+        edits,
+        applyEdits(source, edits),
+      );
+      assert.deepEqual(
+        incremental
+          .filter(({ kind }) => kind === "syntax_issue")
+          .map(({ start, end }) => [start, end]),
+        [[offset, offset + 2]],
+      );
+    });
+  }
+}
+
 test("gitattributes: replacing and restoring an octal byte preserves incremental parsing", () => {
   const source = String.raw`"[\303\251-z]"`;
   const original = parse(source);
@@ -248,9 +279,9 @@ test("gitattributes: replacing and restoring an octal byte preserves incremental
   assert.deepEqual(parse(source, edits), original);
 });
 
-test("gitattributes: fixed-seed generated histories preserve full fresh determinism and normal source equivalence", () => {
+test("gitattributes: fixed-seed generated histories preserve source structure and issue ranges", () => {
   const seed = 0x731dac9;
-  const historyCount = 120;
+  const historiesPerInput = 2;
   const editsPerHistory = 4;
   const maxDeletedBytes = 3;
   const lcgMultiplier = 1_664_525;
@@ -271,6 +302,7 @@ test("gitattributes: fixed-seed generated histories preserve full fresh determin
     String.raw`"\133attr]\146oo" text`,
     String.raw`"[[:a\q:]]" text`,
   ];
+  const historyCount = seeds.length * historiesPerInput;
   for (let sample = 0; sample < historyCount; sample++) {
     const source = seeds[sample % seeds.length];
     let bytes = Buffer.from(source);
@@ -284,7 +316,81 @@ test("gitattributes: fixed-seed generated histories preserve full fresh determin
       };
       edits.push(edit);
       bytes = applyEdits(bytes, [edit]);
-      assertEditMatchesContract(source, edits, bytes);
     }
+    assertEditHistory({ source, edits });
   }
 });
+
+for (const newline of ["\n", "\r\n"]) {
+  const tail = "tail1 text\ntail2 -diff\n".replaceAll("\n", newline);
+  for (const prefix of ["", "before text\n".replaceAll("\n", newline)]) {
+    for (const line of [
+      '"quoted pattern" text',
+      "[abc] text",
+      "[attr]macro -diff",
+      "*.c name=value",
+    ]) {
+      test(`gitattributes: truncating ${JSON.stringify(line)} before ${JSON.stringify(newline)} preserves adjacent entries with prefix ${JSON.stringify(prefix)}`, () => {
+        const initial = prefix + line + newline + tail;
+        const original = parse(initial);
+        for (let cut = 0; cut < line.length; cut++) {
+          const source = prefix + line.slice(0, cut) + newline + tail;
+          const edits = [
+            {
+              byte: prefix.length + cut,
+              deleteBytes: line.length - cut,
+              insert: "",
+            },
+          ];
+          const tree = assertIncrementalEqualsFresh(initial, edits, source);
+          const boundary = prefix.length + cut + newline.length;
+          if (prefix) {
+            assert.deepEqual(
+              tree
+                .filter(
+                  (node) => node.parent === 0 && node.start < prefix.length,
+                )
+                .map(({ kind, start, end }) => [kind, start, end]),
+              [["attribute_rule", 0, prefix.length]],
+              source,
+            );
+          }
+          assert.deepEqual(
+            tree
+              .filter((node) => node.parent === 0 && node.start >= boundary)
+              .map(({ kind, start, end }) => [
+                kind,
+                start - boundary,
+                end - boundary,
+              ]),
+            [
+              ["attribute_rule", 0, 10 + newline.length],
+              ["attribute_rule", 10 + newline.length, tail.length],
+            ],
+            source,
+          );
+          for (const node of tree.filter(
+            (node) => node.kind === "syntax_issue",
+          )) {
+            assert.ok(
+              node.start >= prefix.length && node.end <= boundary,
+              source,
+            );
+          }
+          assert.deepEqual(
+            parse(initial, [
+              ...edits,
+              {
+                byte: prefix.length + cut,
+                deleteBytes: 0,
+                insert: line.slice(cut),
+              },
+            ]),
+            original,
+            source,
+          );
+        }
+      });
+    }
+  }
+}

@@ -46,29 +46,63 @@ abc text
 
 ==================
 Negative pattern
-:error
+:cst
 ==================
 !a text
 ---
 
+0:0 - 0:7   document
+0:0 - 0:7     attribute_rule
+0:0 - 0:2       pattern: pattern
+0:0 - 0:1         issue: syntax_issue
+0:0 - 0:1           invalid_syntax
+0:0 - 0:1             negative_pattern `!`
+0:1 - 0:2         glob_literal `a`
+0:3 - 0:7       attribute
+0:3 - 0:7         name: attribute_name
+0:3 - 0:7           name_text `text`
+
 ==================
 Glob escape ended by separator
-:error
+:cst
 ==================
 a\ text
 ---
 
+0:0 - 0:7   document
+0:0 - 0:7     attribute_rule
+0:0 - 0:2       pattern: pattern
+0:0 - 0:1         glob_literal `a`
+0:1 - 0:2         issue: syntax_issue
+0:1 - 0:2           invalid_syntax
+0:1 - 0:2             incomplete_escape `\\`
+0:3 - 0:7       attribute
+0:3 - 0:7         name: attribute_name
+0:3 - 0:7           name_text `text`
+
 ==================
 Glob escape before separator and at EOF
-:error
 ==================
 a\ text
 b\
 ---
 
+(document
+  (attribute_rule pattern: (pattern (glob_literal) issue: (syntax_issue (invalid_syntax (incomplete_escape))))
+    (attribute name: (attribute_name (name_text))) (line_ending))
+  (attribute_rule pattern: (pattern (glob_literal) issue: (syntax_issue (incomplete_syntax (incomplete_escape))))))
+
 ==================
 Incomplete glob escape
-:error
+:cst
 ==================
 a\
 ---
+
+0:0 - 0:2   document
+0:0 - 0:2     attribute_rule
+0:0 - 0:2       pattern: pattern
+0:0 - 0:1         glob_literal `a`
+0:1 - 0:2         issue: syntax_issue
+0:1 - 0:2           incomplete_syntax
+0:1 - 0:2             incomplete_escape `\\`
