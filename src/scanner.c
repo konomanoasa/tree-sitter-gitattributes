@@ -135,7 +135,6 @@ absent(TSLexer *lexer, enum Token missing, enum Token incomplete) {
   return lexer->eof(lexer) ? incomplete : missing;
 }
 
-// Include the next decoded character so edits invalidate the run.
 static bool invalid_run(Scanner *s, TSLexer *lexer, const bool *valid) {
   do advance(s, lexer);
   while (!lexer->eof(lexer) && lexer->lookahead == DECODE_ERROR);
@@ -440,7 +439,6 @@ static void hold_prefix(Scanner *s, Cursor *r, uint32_t prefix_end) {
   s->next_end = r->end;
 }
 
-// Consume lookahead units fully so edits inside them invalidate the decision.
 static bool prepare_glob(Scanner *s, TSLexer *lexer, const bool *valid) {
   Cursor r = cursor(s, lexer, s->content_end);
   bool separator = r.c == '/';
