@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@konomanoasa/tree-sitter-gitattributes)](https://www.npmjs.com/package/@konomanoasa/tree-sitter-gitattributes)
 
 [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for
-Git attributes files 2.55.0.
+Git attributes files 2.56.0.
 
 ## Installation
 
@@ -23,8 +23,8 @@ npm test
 
 ## Specifications
 
-- [Git 2.55.0 gitattributes manual](https://git-scm.com/docs/gitattributes/2.55.0)
-- [Git 2.55.0 gitignore manual](https://git-scm.com/docs/gitignore/2.55.0)
+- [Git 2.56.0 gitattributes manual](https://git-scm.com/docs/gitattributes/2.56.0)
+- [Git 2.56.0 gitignore manual](https://git-scm.com/docs/gitignore/2.56.0)
 
 ## License
 

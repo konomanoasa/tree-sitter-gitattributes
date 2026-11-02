@@ -470,11 +470,11 @@ static bool prepare_glob(Scanner *s, TSLexer *lexer, const bool *valid) {
       s->next_end = r.end;
       step(&r);
     }
-    const bool pair = count == 2 && s->component_start;
+    const bool multiple = count >= 2 && s->component_start;
     const bool tail = r.c == CURSOR_END && s->after_separator;
     if (r.c == '\\') step(&r);
     const bool slash = r.c == '/';
-    s->next = pair && (slash || tail) ? RECURSIVE_WILDCARD : WILDCARD;
+    s->next = multiple && (slash || tail) ? RECURSIVE_WILDCARD : WILDCARD;
   } else if (r.kind == QUOTED_ESCAPE && r.c != '[') s->next = QUOTED_ESCAPE;
   else if (r.c == '[') {
     s->next = SET_OPEN;

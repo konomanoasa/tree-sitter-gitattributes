@@ -14,7 +14,7 @@ x\/***/b
   (attribute_rule pattern: (pattern (glob_literal) (path_separator) (recursive_wildcard) (escape) (glob_literal)) (line_ending))
   (attribute_rule pattern: (pattern (recursive_wildcard) (escape) (glob_literal)) (line_ending))
   (attribute_rule pattern: (pattern (glob_literal) (escape) (recursive_wildcard)) (line_ending))
-  (attribute_rule pattern: (pattern (glob_literal) (escape) (wildcard) (path_separator) (glob_literal)) (line_ending))
+  (attribute_rule pattern: (pattern (glob_literal) (escape) (recursive_wildcard) (path_separator) (glob_literal)) (line_ending))
   (attribute_rule pattern: (pattern opening: (quote_open) (glob_literal) (escape) (recursive_wildcard) (escape) (glob_literal) closing: (quote_close))))
 
 ==================
@@ -130,7 +130,7 @@ x/**\\/b
 0:7 - 0:8         glob_literal `b`
 
 ==================
-Escaped slash does not make three asterisks recursive
+Escaped slash makes three asterisks recursive
 :cst
 ==================
 x\/***/b
@@ -141,7 +141,7 @@ x\/***/b
 0:0 - 0:8       pattern: pattern
 0:0 - 0:1         glob_literal `x`
 0:1 - 0:3         escape `\\/`
-0:3 - 0:6         wildcard `***`
+0:3 - 0:6         recursive_wildcard `***`
 0:6 - 0:7         path_separator `/`
 0:7 - 0:8         glob_literal `b`
 
@@ -236,7 +236,7 @@ Octal spellings preserve escaped separator boundaries
 0:27 - 0:28         closing: quote_close `\"`
 
 ==================
-Three asterisks between separators follow the manual
+Three asterisks between separators span directories
 :cst
 ==================
 a/***/b
@@ -247,7 +247,7 @@ a/***/b
 0:0 - 0:7       pattern: pattern
 0:0 - 0:1         glob_literal `a`
 0:1 - 0:2         path_separator `/`
-0:2 - 0:5         wildcard `***`
+0:2 - 0:5         recursive_wildcard `***`
 0:5 - 0:6         path_separator `/`
 0:6 - 0:7         glob_literal `b`
 
@@ -325,7 +325,7 @@ Standalone double asterisk is ordinary
 0:0 - 0:2         wildcard `**`
 
 ==================
-Long asterisk run is ordinary
+Long asterisk run before slash is recursive
 :cst
 ==================
 ***/
@@ -334,7 +334,7 @@ Long asterisk run is ordinary
 0:0 - 0:4   document
 0:0 - 0:4     attribute_rule
 0:0 - 0:4       pattern: pattern
-0:0 - 0:3         wildcard `***`
+0:0 - 0:3         recursive_wildcard `***`
 0:3 - 0:4         path_separator `/`
 
 ==================
