@@ -3,6 +3,7 @@
 [![CI](https://github.com/konomanoasa/tree-sitter-gitattributes/actions/workflows/ci.yaml/badge.svg)](https://github.com/konomanoasa/tree-sitter-gitattributes/actions/workflows/ci.yaml)
 [![crates.io](https://img.shields.io/crates/v/konomanoasa-tree-sitter-gitattributes)](https://crates.io/crates/konomanoasa-tree-sitter-gitattributes)
 [![npm](https://img.shields.io/npm/v/@konomanoasa/tree-sitter-gitattributes)](https://www.npmjs.com/package/@konomanoasa/tree-sitter-gitattributes)
+[![PyPI](https://img.shields.io/pypi/v/konomanoasa-tree-sitter-gitattributes)](https://pypi.org/project/konomanoasa-tree-sitter-gitattributes/)
 
 [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for
 Git attributes files 2.56.0.
