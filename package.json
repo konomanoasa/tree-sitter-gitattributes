@@ -1,6 +1,6 @@
 {
   "name": "@konomanoasa/tree-sitter-gitattributes",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Tree-sitter grammar for gitattributes.",
   "license": "MIT",
   "repository": "git+https://github.com/konomanoasa/tree-sitter-gitattributes.git",
